@@ -1,14 +1,18 @@
-// 任务（项目/任务/子任务统一模型）
-export interface Task {
+// 树状节点接口
+export interface TreeNode {
     id: string;
     name: string;
     parentId: string | null;
     color: string;
     isExpanded: boolean;
     level: number;
+    children: string[];
     createdAt: string;
     updatedAt: string;
 }
+
+// 字典类型（用于快速查找）
+export type Dict<T> = Record<string, T>;
 
 // 日期记录
 export interface DateRecord {

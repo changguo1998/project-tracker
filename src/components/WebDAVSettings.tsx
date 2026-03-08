@@ -40,23 +40,23 @@ export function WebDAVSettings({ isOpen, onClose }: WebDAVSettingsProps) {
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-lg w-96 max-w-full mx-4">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg w-96 max-w-full mx-4">
                 <div className="flex items-center justify-between p-4 border-b">
                     <div className="flex items-center gap-2">
-                        <Settings size={20} />
-                        <h2 className="text-lg font-medium">WebDAV 设置</h2>
+                        <Settings size={20} className="dark:text-gray-300" />
+                        <h2 className="text-lg font-medium dark:text-white">WebDAV 设置</h2>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-1 hover:bg-gray-100 rounded"
+                        className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
                     >
-                        <X size={20} />
+                        <X size={20} className="dark:text-gray-300" />
                     </button>
                 </div>
 
                 <div className="p-4 space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             WebDAV 地址
                         </label>
                         <input
@@ -66,12 +66,12 @@ export function WebDAVSettings({ isOpen, onClose }: WebDAVSettingsProps) {
                                 setConfig({ ...config, url: e.target.value })
                             }
                             placeholder="https://example.com/dav"
-                            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             用户名
                         </label>
                         <input
@@ -83,12 +83,12 @@ export function WebDAVSettings({ isOpen, onClose }: WebDAVSettingsProps) {
                                     username: e.target.value,
                                 })
                             }
-                            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                             密码
                         </label>
                         <input
@@ -100,19 +100,19 @@ export function WebDAVSettings({ isOpen, onClose }: WebDAVSettingsProps) {
                                     password: e.target.value,
                                 })
                             }
-                            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                         />
                     </div>
 
                     {testStatus === "success" && (
-                        <div className="flex items-center gap-2 text-green-600 text-sm">
+                        <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm">
                             <Check size={16} />
                             连接成功
                         </div>
                     )}
 
                     {testStatus === "error" && (
-                        <div className="flex items-center gap-2 text-red-600 text-sm">
+                        <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
                             <AlertCircle size={16} />
                             连接失败，请检查配置
                         </div>
@@ -123,7 +123,7 @@ export function WebDAVSettings({ isOpen, onClose }: WebDAVSettingsProps) {
                     <button
                         onClick={handleTest}
                         disabled={testStatus === "testing"}
-                        className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                        className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
                     >
                         {testStatus === "testing" ? "测试中..." : "测试连接"}
                     </button>

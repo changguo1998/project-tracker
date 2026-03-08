@@ -1,86 +1,119 @@
-import { useState } from "react";
-import { ChevronDown, ChevronRight, Plus, MoreHorizontal } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Plus, Trash2 } from "lucide-react";
 import { useTaskStore } from "@/stores/taskStore";
 import { usePlanStore } from "@/stores/planStore";
-import type { Task, DateRecord } from "@/types";
+import type { TreeNode, DateRecord } from "@/types";
 
 interface TaskColumnProps {
-    task: Task;
+    task: TreeNode;
     dateRecord: DateRecord;
     isPlanning: boolean;
+    columnWidth?: number;
 }
 
-export function TaskColumn({ task, dateRecord, isPlanning }: TaskColumnProps) {
-    const { toggleExpand, getDirectChildren, expandedTasks } = useTaskStore();
-    const { getPlansByDateAndTask, addPlan, toggleComplete, plans } =
+export function TaskColumn({ task, dateRecord, isPlanning, columnWidth = 240 }: TaskColumnProps) {
+    const { tasks, addTask, deleteTask, toggleExpand, expandedTasks } = useTaskStore();
+    const { getPlansByDateAndTask, addPlan, toggleComplete } =
         usePlanStore();
     const [newPlanContent, setNewPlanContent] = useState("");
     const [isAdding, setIsAdding] = useState(false);
+    const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; taskId: string; taskName: string }>({ show: false, taskId: "", taskName: "" });
 
-    const children = getDirectChildren(task.id);
-    const isExpanded = expandedTasks.has(task.id);
+    const planInputRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (isAdding && planInputRef.current && !planInputRef.current.contains(event.target as Node)) {
+                setIsAdding(false);
+                setNewPlanContent("");
+            }
+        };
+
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [isAdding]);
+
+    const children = task.children.map(id => tasks[id]).filter((node): node is TreeNode => node !== undefined);
     const taskPlans = getPlansByDateAndTask(dateRecord.id, task.id);
-
-    const handleAddPlan = () => {
-        if (newPlanContent.trim()) {
-            addPlan(dateRecord.id, task.id, newPlanContent);
-            setNewPlanContent("");
-            setIsAdding(false);
-        }
-    };
-
-    const renderHeader = () => (
-        <div
-            className="flex items-center justify-between p-2 border-b"
-            style={{ backgroundColor: `${task.color}20` }}
-        >
-            <div className="flex items-center gap-1">
-                {children.length > 0 && (
-                    <button
-                        onClick={() => toggleExpand(task.id)}
-                        className="p-1 hover:bg-gray-200 rounded"
-                    >
-                        {isExpanded ? (
-                            <ChevronDown size={16} />
-                        ) : (
-                            <ChevronRight size={16} />
-                        )}
-                    </button>
-                )}
-                <span
-                    className="font-medium text-sm truncate"
-                    style={{ color: task.color }}
-                >
-                    {task.parentId && "◆ "}
-                    {task.name}
-                </span>
-            </div>
-            <button className="p-1 hover:bg-gray-200 rounded">
-                <MoreHorizontal size={14} />
-            </button>
-        </div>
-    );
 
     const renderPlanningContent = () => (
         <div className="p-2 space-y-1">
-            {children.map((child) => (
-                <div
-                    key={child.id}
-                    className="text-sm p-1 rounded hover:bg-gray-100"
-                    style={{ borderLeft: `3px solid ${child.color}` }}
-                >
-                    {child.name}
+            {task.id !== "root-summary" && children.map((child) => {
+                const expandedSet = expandedTasks instanceof Set
+                    ? expandedTasks
+                    : new Set(Array.isArray(expandedTasks) ? expandedTasks : []);
+                const isExpanded = expandedSet.has(child.id);
+
+                return (
+                    <div
+                        className="text-sm p-1 rounded flex items-center justify-between group w-full text-left hover:bg-gray-100 dark:hover:bg-gray-700"
+                        style={{ borderLeft: `3px solid ${child.color}` }}
+                    >
+                        <button
+                            key={child.id}
+                            onClick={() => {
+                                toggleExpand(child.id);
+                            }}
+                            className="flex items-center gap-1 flex-1 text-left"
+                        >
+                            <span className="truncate flex-1 dark:text-gray-200">{child.name}</span>
+                        </button>
+                        <button
+                            onClick={(e) => {
+                                setDeleteConfirm({ show: true, taskId: child.id, taskName: child.name });
+                                e.stopPropagation();
+                            }}
+                            className="p-0.5 text-gray-400 dark:text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="删除子任务"
+                        >
+                            <Trash2 size={12} />
+                        </button>
+                    </div>
+                );
+            })}
+            {isAdding ? (
+                <div ref={planInputRef} className="flex gap-1 min-w-0">
+                    <input
+                        type="text"
+                        value={newPlanContent}
+                        onChange={(e) => setNewPlanContent(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                if (newPlanContent.trim()) {
+                                    addPlan(dateRecord.id, task.id, newPlanContent);
+                                    setNewPlanContent("");
+                                    setIsAdding(false);
+                                }
+                            }
+                        }}
+                        placeholder="输入计划..."
+                        className="flex-1 text-sm border rounded px-1 py-0.5 min-w-0 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        autoFocus
+                    />
+                    <button
+                        onClick={() => {
+                            if (newPlanContent.trim()) {
+                                addPlan(dateRecord.id, task.id, newPlanContent);
+                                setNewPlanContent("");
+                                setIsAdding(false);
+                            }
+                        }}
+                        className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded shrink-0 hover:bg-blue-600"
+                    >
+                        添加
+                    </button>
                 </div>
-            ))}
-            <button
-                className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 p-1"
-                onClick={() => {
-                    /* 添加子任务 */
-                }}
-            >
-                <Plus size={14} />
-                添加子任务
-            </button>
+            ) : (
+                <button
+                    className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1"
+                    onClick={() => setIsAdding(true)}
+                >
+                    <Plus size={14} />
+                    添加计划
+                </button>
+            )}
         </div>
     );
 
@@ -99,7 +132,7 @@ export function TaskColumn({ task, dateRecord, isPlanning }: TaskColumnProps) {
                     />
                     <span
                         className={
-                            plan.isCompleted ? "line-through text-gray-400" : ""
+                            plan.isCompleted ? "line-through text-gray-400 dark:text-gray-500" : "dark:text-gray-200"
                         }
                     >
                         {plan.content}
@@ -108,26 +141,40 @@ export function TaskColumn({ task, dateRecord, isPlanning }: TaskColumnProps) {
             ))}
 
             {isAdding ? (
-                <div className="flex gap-1">
+                <div ref={planInputRef} className="flex gap-1 min-w-0">
                     <input
                         type="text"
                         value={newPlanContent}
                         onChange={(e) => setNewPlanContent(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleAddPlan()}
+                        onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                                if (newPlanContent.trim()) {
+                                    addPlan(dateRecord.id, task.id, newPlanContent);
+                                    setNewPlanContent("");
+                                    setIsAdding(false);
+                                }
+                            }
+                        }}
                         placeholder="输入计划..."
-                        className="flex-1 text-sm border rounded px-1 py-0.5"
+                        className="flex-1 text-sm border rounded px-1 py-0.5 min-w-0 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                         autoFocus
                     />
                     <button
-                        onClick={handleAddPlan}
-                        className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded"
+                        onClick={() => {
+                            if (newPlanContent.trim()) {
+                                addPlan(dateRecord.id, task.id, newPlanContent);
+                                setNewPlanContent("");
+                                setIsAdding(false);
+                            }
+                        }}
+                        className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded shrink-0 hover:bg-blue-600"
                     >
                         添加
                     </button>
                 </div>
             ) : (
                 <button
-                    className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 p-1"
+                    className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1"
                     onClick={() => setIsAdding(true)}
                 >
                     <Plus size={14} />
@@ -164,8 +211,7 @@ export function TaskColumn({ task, dateRecord, isPlanning }: TaskColumnProps) {
     };
 
     return (
-        <div className="min-w-[200px] border-r last:border-r-0 flex flex-col">
-            {renderHeader()}
+        <div className="border-r last:border-r-0 flex flex-col shrink-0" style={{ width: `${columnWidth}px` }}>
             <div className="flex-1">
                 {isPlanning
                     ? renderPlanningContent()
@@ -173,6 +219,34 @@ export function TaskColumn({ task, dateRecord, isPlanning }: TaskColumnProps) {
                       ? renderDailyContent()
                       : renderHistoryContent()}
             </div>
+
+            {deleteConfirm.show && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-80 shadow-xl">
+                        <h3 className="text-lg font-medium mb-2 dark:text-white">确认删除</h3>
+                        <p className="text-gray-600 dark:text-gray-300 mb-4">
+                            确定要删除"{deleteConfirm.taskName}"吗？
+                        </p>
+                        <div className="flex justify-end gap-2">
+                            <button
+                                onClick={() => setDeleteConfirm({ show: false, taskId: "", taskName: "" })}
+                                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={() => {
+                                    deleteTask(deleteConfirm.taskId);
+                                    setDeleteConfirm({ show: false, taskId: "", taskName: "" });
+                                }}
+                                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                            >
+                                删除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
