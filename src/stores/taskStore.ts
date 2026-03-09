@@ -1,16 +1,19 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { TreeNode, VisibleColumn, Dict } from "@/types";
+import { debug } from "@/utils/debug";
 
 interface TaskState {
     tasks: Dict<TreeNode>;
     expandedTasks: Set<string>;
+    level1Visibility: Dict<boolean>;
 
     addTask: (name: string, parentId?: string) => void;
     deleteTask: (id: string) => void;
     expandSubTask: (id: string) => void;
     collapseSubTask: (id: string) => void;
     toggleExpand: (taskId: string) => void;
+    setLevel1Visibility: (taskId: string, isVisible: boolean) => void;
     getVisibleColumns: () => VisibleColumn[];
     ensureRootNode: () => void;
 }
@@ -98,8 +101,10 @@ export const useTaskStore = create<TaskState>()(
         (set, get) => ({
             tasks: {},
             expandedTasks: new Set(),
+            level1Visibility: {},
 
             addTask: (name: string, parentId?: string) => {
+                debug('addTask', { name, parentId });
                 const targetParentId = parentId || ROOT_NODE_ID;
                 let parent = get().tasks[targetParentId];
 
@@ -129,7 +134,10 @@ export const useTaskStore = create<TaskState>()(
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                 };
-
+                const newL1Visibility = { ...get().level1Visibility };
+                if (level === 1) {
+                    newL1Visibility[newTask.id] = true;
+                }
                 set((state) => {
                     const newState = {
                         tasks: {
@@ -141,7 +149,8 @@ export const useTaskStore = create<TaskState>()(
                                 updatedAt: new Date().toISOString()
                             }
                         },
-                        expandedTasks: state.expandedTasks
+                        expandedTasks: state.expandedTasks,
+                        level1Visibility: newL1Visibility
                     };
                     return newState;
                 });
@@ -215,10 +224,18 @@ export const useTaskStore = create<TaskState>()(
                 });
             },
 
+            setLevel1Visibility: (taskId: string, isVisible: boolean) => {
+                debug('setLevel1Visibility', { taskId, isVisible });
+                set((state) => ({
+                    level1Visibility: { ...state.level1Visibility, [taskId]: isVisible }
+                }));
+            },
+
             getVisibleColumns: () => {
                 const visibleColumns: VisibleColumn[] = [];
                 const tasks = get().tasks;
                 const expandedTasks = get().expandedTasks;
+                const level1Visibility = get().level1Visibility;
 
                 const expandedSet = expandedTasks instanceof Set
                     ? expandedTasks
@@ -228,7 +245,10 @@ export const useTaskStore = create<TaskState>()(
                     const node = tasks[nodeId];
                     if (!node) return;
 
-                    if (shouldShow || expandedSet.has(nodeId) || node.level <= 1) {
+                    if (shouldShow ||
+                        expandedSet.has(nodeId) ||
+                        node.level === 0 ||
+                        (node.level === 1 && level1Visibility[nodeId] !== false)) {
                         visibleColumns.push({
                             taskId: nodeId,
                             isSubTask: node.parentId !== null,
@@ -266,6 +286,11 @@ export const useTaskStore = create<TaskState>()(
         {
             name: "task-storage",
             storage: createJSONStorage(() => localStorage),
+            partialize: (state) => ({
+                tasks: state.tasks,
+                expandedTasks: state.expandedTasks,
+                level1Visibility: state.level1Visibility,
+            }),
         },
     ),
 );

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { format, addDays, isSameDay, parseISO } from "date-fns";
+import { addDays, isSameDay, parseISO } from "date-fns";
 import type { DateRecord } from "@/types";
 
 interface DateState {

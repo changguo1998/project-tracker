@@ -6,7 +6,7 @@ import { useThemeStore } from "@/stores/themeStore";
 
 function App() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [isOnline, setIsOnline] = useState(false);
+    const isOnline = false;
     const { isDark, toggleTheme } = useThemeStore();
 
     useEffect(() => {
