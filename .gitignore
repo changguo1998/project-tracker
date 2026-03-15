@@ -28,6 +28,7 @@ build
 .idea
 .DS_Store
 .trae
+.lingma
 *.suo
 *.ntvs*
 *.njsproj
