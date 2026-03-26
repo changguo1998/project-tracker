@@ -1,6 +1,6 @@
 export type TaskStatus = "plan" | "progress" | "failed" | "done" | "delay";
 
-export interface Task {
+export interface Log {
     projectID: string;
     date: string;
     status: TaskStatus;
