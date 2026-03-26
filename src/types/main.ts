@@ -1,12 +1,6 @@
-export type TaskStatus =
-    "plan" |
-    "progress" |
-    "failed" |
-    "done" |
-    "delay";
+export type TaskStatus = "plan" | "progress" | "failed" | "done" | "delay";
 
 export interface Task {
-    taskId: string;
     projectID: string;
     date: string;
     status: TaskStatus;
@@ -18,10 +12,7 @@ export interface Project {
     projectID: string;
     projectName: string;
     level: number;
-    children: (string | Task)[];
-}
-
-export interface Timeline {
-    dates: string[];
-    tasks: Task[];
+    // Set<string>: children's are Project
+    // string[]: children's are Task
+    children: Set<string> | string[] | null;
 }

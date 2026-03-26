@@ -1,6 +1,2 @@
-<script lang="ts">
-</script>
 
-<template>
-  <div id="app"></div>
-</template>
+export default App;
