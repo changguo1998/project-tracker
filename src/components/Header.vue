@@ -1,10 +1,8 @@
 <template>
     <div class="header-container">
-        <v-menu>
-            <v-menu-item>Home</v-menu-item>
-            <v-menu-item>Sync</v-menu-item>
-            <v-menu-item>Settings</v-menu-item>
-        </v-menu>
+            <v-btn variant="outlined">Home</v-btn>
+            <v-btn variant="outlined">Sync</v-btn>
+            <v-btn variant="outlined">Settings</v-btn>
     </div>
 </template>
 <script setup lang="ts">
@@ -12,15 +10,15 @@
 <style>
 .header-container {
     display: flex;
-    background-color: seagreen;
-    justify-content: space-between;
-    align-items: left;
+    justify-content: left;
     width: 100%;
+    height: auto;
     border-radius: 10px;
+    padding: 2px;
 }
-.header-container v-menu-item {
-    margin: 20px;
-    font-size: normal;
-    color: black;
+.header-container v-btn {
+    margin: 5px;
+    margin-left: 10px;
+    margin-right: 10px;
 }
 </style>

@@ -1,8 +1,10 @@
 <template>
     <div class="app-container">
-        <div class="app-wapper">
-            <Header />
-            <TopLevelProjects />
+        <div class="app-wrapper">
+            <div>
+                <Header />
+                <TopLevelProjects />
+            </div>
             <ProjectTimeTable />
         </div>
     </div>
@@ -20,17 +22,21 @@ import ProjectTimeTable from "@/components/ProjectTimeTable.vue";
     position: relative;
     width: 100vw;
     height: 100vh;
-    overflow: hidden;
-    padding: 20px;
+    top: 0;
+    left: 0;
+    padding: 5px;
     font-size: xx-large;
     align-items: center;
+    align-content: center;
 }
 
-.app-wapper {
+.app-wrapper {
     width: 90%;
-    height: 90%;
+    height: 100%;
+    display: flex;
     flex-direction: column;
     justify-content: center;
     position: relative;
+    background-color: red;
 }
 </style>
