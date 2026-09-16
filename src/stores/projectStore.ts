@@ -33,14 +33,20 @@ export const useProjectStore = defineStore("projectSet", () => {
     };
 
     const hasProject = (id: string): boolean => projectMap.value.has(id);
-    const getByID = (id: string): Project | undefined => projectMap.value.get(id);
+    const getByID = (id: string): Project | undefined =>
+        projectMap.value.get(id);
 
     /** 顶层项目（parentID === null） */
     const getLevel1 = (): Project[] =>
-        Array.from(projectMap.value.values()).filter((p) => p.parentID === null);
+        Array.from(projectMap.value.values()).filter(
+            (p) => p.parentID === null,
+        );
 
     /** server-first：先 await 后端成功，再用服务端返回的 ID 落本地 */
-    const addProject = async (name: string, parentID: string | null): Promise<Project> => {
+    const addProject = async (
+        name: string,
+        parentID: string | null,
+    ): Promise<Project> => {
         const project = await api.addProject({ parentID, name });
         const rec: Project = {
             id: project.id,
@@ -62,7 +68,10 @@ export const useProjectStore = defineStore("projectSet", () => {
         return rec;
     };
 
-    const renameProject = async (id: string, name: string): Promise<Project | undefined> => {
+    const renameProject = async (
+        id: string,
+        name: string,
+    ): Promise<Project | undefined> => {
         const project = await api.patchProject(id, { name });
         const cur = projectMap.value.get(id);
         if (cur) {
@@ -94,5 +103,14 @@ export const useProjectStore = defineStore("projectSet", () => {
         }
     };
 
-    return { projectMap, loadState, hasProject, getByID, getLevel1, addProject, renameProject, rmProject };
+    return {
+        projectMap,
+        loadState,
+        hasProject,
+        getByID,
+        getLevel1,
+        addProject,
+        renameProject,
+        rmProject,
+    };
 });

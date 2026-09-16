@@ -4,7 +4,9 @@ import type { ApiLog, ApiProject, TaskStatus } from "@/types/main";
 const TOKEN = (import.meta.env.VITE_API_TOKEN as string | undefined) || "";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-    const headers: Record<string, string> = { ...((init?.headers as Record<string, string> | undefined) ?? {}) };
+    const headers: Record<string, string> = {
+        ...((init?.headers as Record<string, string> | undefined) ?? {}),
+    };
     if (init?.body !== undefined) {
         headers["Content-Type"] = "application/json";
     }
@@ -27,20 +29,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     return (await res.json()) as T;
 }
 
-export function getState(): Promise<{ projects: ApiProject[]; logs: ApiLog[] }> {
+export function getState(): Promise<{
+    projects: ApiProject[];
+    logs: ApiLog[];
+}> {
     return request("/api/state");
 }
 
-export async function addProject(p: { parentID: string | null; name: string }): Promise<ApiProject> {
-    const body = await request<{ id: string; project: ApiProject }>("/api/projects", {
-        method: "POST",
-        body: JSON.stringify(p),
-    });
+export async function addProject(p: {
+    parentID: string | null;
+    name: string;
+}): Promise<ApiProject> {
+    const body = await request<{ id: string; project: ApiProject }>(
+        "/api/projects",
+        {
+            method: "POST",
+            body: JSON.stringify(p),
+        },
+    );
     // 服务端返回 {id, project}，兼容 project 未内嵌 id 的情况
     return body.project.id ? body.project : { ...body.project, id: body.id };
 }
 
-export function patchProject(id: string, p: { name: string }): Promise<ApiProject> {
+export function patchProject(
+    id: string,
+    p: { name: string },
+): Promise<ApiProject> {
     return request<{ project: ApiProject }>(`/api/projects/${id}`, {
         method: "PATCH",
         body: JSON.stringify(p),

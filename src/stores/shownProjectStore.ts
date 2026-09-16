@@ -25,7 +25,8 @@ export const useShownProjectStore = defineStore("shownProjectSet", () => {
         });
     };
 
-    const isShown = (id: string): boolean => shownProjectSet.value.get(id) ?? true;
+    const isShown = (id: string): boolean =>
+        shownProjectSet.value.get(id) ?? true;
 
     const switchShownFlag = (id: string) => {
         shownProjectSet.value.set(id, !isShown(id));

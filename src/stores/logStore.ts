@@ -15,10 +15,15 @@ export const useLogStore = defineStore("logSet", () => {
     const getByID = (id: string): LogRec | undefined => logMap.value.get(id);
 
     const getLogsByProjectID = (projectID: string): LogRec[] =>
-        Array.from(logMap.value.values()).filter((l) => l.projectID === projectID);
+        Array.from(logMap.value.values()).filter(
+            (l) => l.projectID === projectID,
+        );
 
     /** 时间表单元格按 projectID+date 查询；多条时取最新（每项目每天 1 条为常规形态） */
-    const getLogByProjectAndDate = (projectID: string, date: string): LogRec | undefined => {
+    const getLogByProjectAndDate = (
+        projectID: string,
+        date: string,
+    ): LogRec | undefined => {
         const cand = Array.from(logMap.value.values()).filter(
             (l) => l.projectID === projectID && l.date === date,
         );
@@ -44,7 +49,10 @@ export const useLogStore = defineStore("logSet", () => {
         return log;
     };
 
-    const updateLog = async (id: string, p: Partial<Omit<LogRec, "id">>): Promise<LogRec> => {
+    const updateLog = async (
+        id: string,
+        p: Partial<Omit<LogRec, "id">>,
+    ): Promise<LogRec> => {
         const log = await api.patchLog(id, p);
         logMap.value.set(id, log);
         return log;
@@ -57,7 +65,9 @@ export const useLogStore = defineStore("logSet", () => {
 
     /** 出现过的日志日期（去重、倒序，用于时间表行） */
     const allDates = (): string[] =>
-        Array.from(new Set(Array.from(logMap.value.values()).map((l) => l.date)))
+        Array.from(
+            new Set(Array.from(logMap.value.values()).map((l) => l.date)),
+        )
             .sort()
             .reverse();
 
