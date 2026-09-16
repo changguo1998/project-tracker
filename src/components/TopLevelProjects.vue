@@ -106,7 +106,7 @@ const removeProject = async (p: Project) => {
     margin: 10px;
 }
 
-.level1-list-container v-chip {
+.level1-list-container .v-chip {
     margin: 4px;
     padding: 4px;
     border-radius: 5px;

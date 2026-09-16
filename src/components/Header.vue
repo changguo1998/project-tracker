@@ -20,7 +20,7 @@ const emit = defineEmits<{ (e: "sync"): void }>();
     border-radius: 10px;
     padding: 2px;
 }
-.header-container v-btn {
+.header-container .v-btn {
     margin: 5px;
     margin-left: 10px;
     margin-right: 10px;

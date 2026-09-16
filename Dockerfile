@@ -6,7 +6,7 @@ ARG VITE_API_TOKEN
 ENV VITE_API_TOKEN=$VITE_API_TOKEN
 
 # 启用 corepack 并激活 pnpm@11（版本与 package.json 的 packageManager 字段一致）
-RUN corepack enable && corepack prepare pnpm@11.1.2 --activate
+RUN corepack enable && corepack prepare pnpm@11.27.0 --activate
 
 WORKDIR /app
 
