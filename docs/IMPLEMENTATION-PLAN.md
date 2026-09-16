@@ -2,7 +2,7 @@
 
 > 依据 `docs/DESIGN.md`（设计方案 v1.0，已审阅）。
 > **本计划是执行蓝图**：定义了固定接口契约、文件归属、并行 lane、验收门槛（Definition of Done）与集成时序。
-> 状态：实现已按冻结契约完成并通过 Lane D 集成验证（2026-09-16）；docker 部署演练因本机无 docker 延后（DEPLOY.md [待回填] 待有 docker 环境实测后回填）。
+> 状态：实现已按冻结契约完成并通过 Lane D 集成验证与 M4 部署演练（Docker Desktop/WSL2，2026-09-16）；DEPLOY.md [待回填] 已全部回填，§6 轮换标注未实测（核心演练范围）。
 
 ---
 
@@ -314,7 +314,7 @@ docs/DEPLOY.md         # 云服务器一步步：装 Docker -> 拉代码 -> 构�
 - [x] Lane A curl 套件全绿
 - [x] Lane B `pnpm build` 零告警
 - [x] LANE D 全链路冒烟全绿（含 UI）
-- [ ] DEPLOY.md 无 [待回填] 残留（部署演练通过后）
+- [x] DEPLOY.md 无 [待回填] 残留（部署演练通过后）
 
 ---
 
