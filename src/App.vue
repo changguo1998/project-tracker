@@ -129,118 +129,146 @@ function clear(): void {
 </script>
 
 <template>
-    <div class="app">
-        <header class="topbar">
+    <v-app class="app">
+        <!-- 标题栏 -->
+        <v-app-bar flat elevation="0" color="surface" border="b">
             <div class="brand">
-                <span class="brand-mark">📅</span>
+                <v-icon start color="primary">mdi-calendar-month</v-icon>
                 <span class="brand-name">项目时间表</span>
                 <span class="brand-sub">Project Tracker</span>
             </div>
-            <div class="actions">
-                <span v-if="hasData" class="stat">
-                    {{ projects.length }} 个项目 · {{ logCount }} 条记录 · 近
-                    {{ totalDays }} 天
-                </span>
-                <button class="btn ghost" :disabled="!hasData" @click="clear">
-                    清空
-                </button>
-                <button class="btn primary" @click="randomize">
-                    随机生成数据
-                </button>
-            </div>
-        </header>
-
-        <main class="content">
-            <div v-if="!hasData" class="empty card">
-                <div class="empty-mark">🗓</div>
-                <p class="empty-title">还没有数据</p>
-                <p class="empty-sub">点击右上角「随机生成数据」填充示例时间表</p>
-            </div>
-
-            <div v-else class="card table-card">
-                <div class="table-scroll">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th class="date-col">日期</th>
-                                <th v-for="p in projects" :key="p.id">
-                                    {{ p.name }}
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="d in dates"
-                                :key="d"
-                                :class="{ 'row-today': isToday(d), 'row-weekend': isWeekend(d) }"
-                            >
-                                <td class="date-col">
-                                    <span class="date-text">{{ d }}</span>
-                                    <span v-if="isToday(d)" class="today-tag"
-                                        >今天</span
-                                    >
-                                </td>
-                                <td
-                                    v-for="p in projects"
-                                    :key="p.id"
-                                    class="cell"
-                                    :class="{ 'cell-empty': !logOf(p.id, d) }"
-                                >
-                                    <template v-if="logOf(p.id, d)">
-                                        <div
-                                            class="log"
-                                            :title="`${STATUS_NAME[logOf(p.id, d)!.status]} · ${logOf(p.id, d)!.detail}`"
-                                        >
-                                            <span
-                                                class="badge"
-                                                :class="`st-${logOf(p.id, d)!.status}`"
-                                            >
-                                                {{ STATUS_NAME[logOf(p.id, d)!.status] }}
-                                            </span>
-                                            <span class="summary">
-                                                {{ logOf(p.id, d)!.summary }}
-                                            </span>
-                                        </div>
-                                    </template>
-                                    <span v-else class="plus">＋</span>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+            <template #append>
+                <div class="actions">
+                    <v-chip
+                        v-if="hasData"
+                        variant="outlined"
+                        size="small"
+                        color="secondary"
+                        class="stat-chip"
+                    >
+                        {{ projects.length }} 个项目 · {{ logCount }} 条记录 ·
+                        近 {{ totalDays }} 天
+                    </v-chip>
+                    <v-btn
+                        variant="tonal"
+                        :disabled="!hasData"
+                        prepend-icon="mdi-delete-outline"
+                        @click="clear"
+                    >
+                        清空
+                    </v-btn>
+                    <v-btn
+                        color="primary"
+                        prepend-icon="mdi-dice-5"
+                        @click="randomize"
+                    >
+                        随机生成数据
+                    </v-btn>
                 </div>
-            </div>
-        </main>
-    </div>
+            </template>
+        </v-app-bar>
+
+        <!-- 内容区 -->
+        <v-main>
+            <v-container fluid class="content">
+                <!-- 空状态 -->
+                <v-card v-if="!hasData" class="empty">
+                    <v-icon size="52" color="secondary">
+                        mdi-calendar-blank-outline
+                    </v-icon>
+                    <div class="empty-title">还没有数据</div>
+                    <div class="empty-sub">
+                        点击右上角「随机生成数据」填充示例时间表
+                    </div>
+                </v-card>
+
+                <!-- 日期 × 项目表格 -->
+                <v-card v-else class="table-card">
+                    <div class="table-scroll">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="date-col">日期</th>
+                                    <th v-for="p in projects" :key="p.id">
+                                        {{ p.name }}
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="d in dates"
+                                    :key="d"
+                                    :class="{
+                                        'row-today': isToday(d),
+                                        'row-weekend': isWeekend(d),
+                                    }"
+                                >
+                                    <td class="date-col">
+                                        <span class="date-text">{{ d }}</span>
+                                        <v-chip
+                                            v-if="isToday(d)"
+                                            size="x-small"
+                                            color="primary"
+                                            class="today-tag"
+                                        >
+                                            今天
+                                        </v-chip>
+                                    </td>
+                                    <td
+                                        v-for="p in projects"
+                                        :key="p.id"
+                                        class="cell"
+                                        :class="{
+                                            'cell-empty': !logOf(p.id, d),
+                                        }"
+                                    >
+                                        <template
+                                            v-if="logOf(p.id, d)"
+                                        >
+                                            <div
+                                                class="log"
+                                                :title="`${STATUS_NAME[logOf(p.id, d)!.status]} · ${logOf(p.id, d)!.detail}`"
+                                            >
+                                                <v-chip
+                                                    size="x-small"
+                                                    :class="['badge', `st-${logOf(p.id, d)!.status}`]"
+                                                >
+                                                    {{
+                                                        STATUS_NAME[
+                                                            logOf(p.id, d)!.status
+                                                        ]
+                                                    }}
+                                                </v-chip>
+                                                <span class="summary">
+                                                    {{
+                                                        logOf(p.id, d)!.summary
+                                                    }}
+                                                </span>
+                                            </div>
+                                        </template>
+                                        <span v-else class="plus">＋</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </v-card>
+            </v-container>
+        </v-main>
+    </v-app>
 </template>
 
 <style scoped>
 .app {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
+    background: #f1f5f9;
 }
 
 /* ---------- 标题栏 ---------- */
-.topbar {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 14px 24px;
-    background: #fff;
-    border-bottom: 1px solid #e2e8f0;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
-}
 .brand {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
-}
-.brand-mark {
-    font-size: 20px;
+    padding: 0 4px;
 }
 .brand-name {
     font-size: 17px;
@@ -256,70 +284,22 @@ function clear(): void {
     display: flex;
     align-items: center;
     gap: 10px;
+    padding-right: 8px;
 }
-.stat {
-    font-size: 12.5px;
-    color: #64748b;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 999px;
-    padding: 4px 12px;
+.stat-chip {
     white-space: nowrap;
-}
-
-/* ---------- 按钮 ---------- */
-.btn {
-    font: inherit;
-    font-size: 13.5px;
-    border-radius: 8px;
-    padding: 7px 14px;
-    cursor: pointer;
-    border: 1px solid transparent;
-    transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-.btn:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-}
-.btn.primary {
-    background: #2563eb;
-    color: #fff;
-}
-.btn.primary:hover:not(:disabled) {
-    background: #1d4ed8;
-}
-.btn.ghost {
-    background: #fff;
-    color: #334155;
-    border-color: #cbd5e1;
-}
-.btn.ghost:hover:not(:disabled) {
-    background: #f1f5f9;
 }
 
 /* ---------- 内容区 ---------- */
 .content {
-    flex: 1;
     padding: 24px;
-    display: flex;
-    flex-direction: column;
 }
-.card {
-    background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
-}
-
-/* ---------- 空状态 ---------- */
 .empty {
-    margin: auto;
-    padding: 48px 64px;
+    margin: 12vh auto 0;
+    max-width: 420px;
+    padding: 48px 24px;
     text-align: center;
     color: #64748b;
-}
-.empty-mark {
-    font-size: 40px;
 }
 .empty-title {
     font-size: 16px;
@@ -334,13 +314,11 @@ function clear(): void {
 
 /* ---------- 表格 ---------- */
 .table-card {
-    align-self: flex-start;
-    width: 100%;
     overflow: hidden;
 }
 .table-scroll {
     overflow: auto;
-    max-height: calc(100vh - 96px);
+    max-height: calc(100vh - 128px);
 }
 table {
     border-collapse: separate;
@@ -405,12 +383,7 @@ td.date-col {
     margin-right: 6px;
 }
 .today-tag {
-    font-size: 11px;
-    color: #2563eb;
-    background: #dbeafe;
-    border-radius: 999px;
-    padding: 1px 7px;
-    font-weight: 600;
+    font-style: normal;
 }
 
 /* ---------- 单元格 ---------- */
@@ -435,30 +408,6 @@ tr:hover .plus {
 }
 .badge {
     flex: 0 0 auto;
-    font-size: 11px;
-    border-radius: 999px;
-    padding: 2px 8px;
-    font-weight: 600;
-}
-.st-plan {
-    color: #475569;
-    background: #f1f5f9;
-}
-.st-progress {
-    color: #1d4ed8;
-    background: #dbeafe;
-}
-.st-failed {
-    color: #b91c1c;
-    background: #fee2e2;
-}
-.st-done {
-    color: #15803d;
-    background: #dcfce7;
-}
-.st-delay {
-    color: #b45309;
-    background: #fef3c7;
 }
 .summary {
     color: #334155;
@@ -466,5 +415,27 @@ tr:hover .plus {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 200px;
+}
+
+/* 状态徽章配色（覆盖 v-chip 默认色） */
+.badge.st-plan {
+    background: #f1f5f9;
+    color: #475569;
+}
+.badge.st-progress {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+.badge.st-failed {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+.badge.st-done {
+    background: #dcfce7;
+    color: #15803d;
+}
+.badge.st-delay {
+    background: #fef3c7;
+    color: #b45309;
 }
 </style>
