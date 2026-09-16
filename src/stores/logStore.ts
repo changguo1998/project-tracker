@@ -1,89 +1,78 @@
 import { defineStore } from "pinia";
-import type { Log, TaskStatus } from "@/types/main";
 import { ref, type Ref } from "vue";
-import { randString } from "@/utils/randString";
+import type { LogRec, TaskStatus } from "@/types/main";
+import * as api from "@/api";
 
 export const useLogStore = defineStore("logSet", () => {
-    const logMap: Ref<Map<string, Log>> = ref(new Map());
+    const logMap: Ref<Map<string, LogRec>> = ref(new Map());
 
-    const init = () => {
-        logMap.value = new Map<string, Log>();
+    const loadState = async () => {
+        const state = await api.getState();
+        logMap.value = new Map(state.logs.map((l) => [l.id, l]));
     };
 
-    const hasLog = (id: string): boolean => {
-        return logMap.value.has(id);
+    const hasLog = (id: string): boolean => logMap.value.has(id);
+    const getByID = (id: string): LogRec | undefined => logMap.value.get(id);
+
+    const getLogsByProjectID = (projectID: string): LogRec[] =>
+        Array.from(logMap.value.values()).filter((l) => l.projectID === projectID);
+
+    /** 时间表单元格按 projectID+date 查询；多条时取最新（每项目每天 1 条为常规形态） */
+    const getLogByProjectAndDate = (projectID: string, date: string): LogRec | undefined => {
+        const cand = Array.from(logMap.value.values()).filter(
+            (l) => l.projectID === projectID && l.date === date,
+        );
+        return cand.length > 0 ? cand[cand.length - 1] : undefined;
     };
 
-    const getByID = (id: string): Log | null => {
-        const log = logMap.value.get(id);
-        return log || null;
+    const getLogsByDate = (date: string): LogRec[] =>
+        Array.from(logMap.value.values()).filter((l) => l.date === date);
+
+    const getLogsByStatus = (status: TaskStatus): LogRec[] =>
+        Array.from(logMap.value.values()).filter((l) => l.status === status);
+
+    /** server-first：新增成功后才写本地，返回服务端 ID 的记录 */
+    const addLog = async (p: {
+        projectID: string;
+        date: string;
+        status: TaskStatus;
+        summary: string;
+        detail: string;
+    }): Promise<LogRec> => {
+        const log = await api.addLog(p);
+        logMap.value.set(log.id, log);
+        return log;
     };
 
-    const addLog = (
-        projectID: string,
-        date: string,
-        status: TaskStatus = "plan",
-        summary: string = "",
-        detail: string = "",
-    ) => {
-        const newLog: Log = {
-            projectID: projectID,
-            date: date,
-            status: status,
-            summary: summary,
-            detail: detail,
-        };
-        const logID = randString();
-        logMap.value.set(logID, newLog);
-        return logID;
+    const updateLog = async (id: string, p: Partial<Omit<LogRec, "id">>): Promise<LogRec> => {
+        const log = await api.patchLog(id, p);
+        logMap.value.set(id, log);
+        return log;
     };
 
-    const rmLog = (id: string) => {
-        if (!hasLog(id)) {
-            return;
-        }
+    const rmLog = async (id: string) => {
+        await api.deleteLog(id);
         logMap.value.delete(id);
     };
 
-    const getLogsByProjectID = (projectID: string): Log[] => {
-        const logs: Log[] = [];
-        logMap.value.forEach((log) => {
-            if (log.projectID === projectID) {
-                logs.push(log);
-            }
-        });
-        return logs;
-    };
-
-    const getLogsByDate = (date: string): Log[] => {
-        const logs: Log[] = [];
-        logMap.value.forEach((log) => {
-            if (log.date === date) {
-                logs.push(log);
-            }
-        });
-        return logs;
-    };
-
-    const getLogsByStatus = (status: TaskStatus): Log[] => {
-        const logs: Log[] = [];
-        logMap.value.forEach((log) => {
-            if (log.status === status) {
-                logs.push(log);
-            }
-        });
-        return logs;
-    };
+    /** 出现过的日志日期（去重、倒序，用于时间表行） */
+    const allDates = (): string[] =>
+        Array.from(new Set(Array.from(logMap.value.values()).map((l) => l.date)))
+            .sort()
+            .reverse();
 
     return {
         logMap,
-        init,
+        loadState,
         hasLog,
         getByID,
-        addLog,
-        rmLog,
         getLogsByProjectID,
+        getLogByProjectAndDate,
         getLogsByDate,
         getLogsByStatus,
+        addLog,
+        updateLog,
+        rmLog,
+        allDates,
     };
 });

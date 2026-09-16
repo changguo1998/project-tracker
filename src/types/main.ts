@@ -1,13 +1,21 @@
 export type TaskStatus = "plan" | "progress" | "failed" | "done" | "delay";
 
-/**
- * @field `projectID`: unique identifier of the project
- * @field `date`: date of the log
- * @field `status`: status of the task
- * @field `summary`: summary of the task
- * @field `detail`: detail of the task
- */
-export interface Log {
+/** 服务端记录返回形状（与 §1.1 字段对齐，children 永不出现） */
+export interface ProjectRec {
+    id: string;
+    parentID: string | null;
+    name: string;
+    level: number;
+}
+
+/** 前端模型：children 由 loadState 依据扁平 parentID 重建（叶子为 null） */
+export interface Project extends ProjectRec {
+    children: Set<string> | null;
+}
+
+/** 服务端日志记录（§1.1） */
+export interface LogRec {
+    id: string;
     projectID: string;
     date: string;
     status: TaskStatus;
@@ -15,22 +23,6 @@ export interface Log {
     detail: string;
 }
 
-/**
- * @field `projectID`: unique identifier of the project
- * @field `parentID`: parent project ID of the project
- * @field `projectName`: name of the project
- * @field `level`: level of the project in the tree
- * @field `children`: children of the project, can be Project or Task
- *     - null: if the project has no children
- *     - Set<string>: children's are Project
- *     - string[]: children's are Task
- */
-export interface Project {
-    projectID: string;
-    parentID: string;
-    projectName: string;
-    level: number;
-    // Set<string>: children's are Project
-    // string[]: children's are Task
-    children: Set<string> | string[] | null;
-}
+/** API 层别名，便于 api.ts 契约清晰表达 */
+export type ApiProject = ProjectRec;
+export type ApiLog = LogRec;

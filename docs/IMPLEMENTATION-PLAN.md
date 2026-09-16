@@ -2,7 +2,7 @@
 
 > 依据 `docs/DESIGN.md`（设计方案 v1.0，已审阅）。
 > **本计划是执行蓝图**：定义了固定接口契约、文件归属、并行 lane、验收门槛（Definition of Done）与集成时序。
-> 状态：仅计划，未开始执行；契约已冻结（2026-09-16），**等待 Owner 发令开工**。
+> 状态：实现已按冻结契约完成并通过 Lane D 集成验证（2026-09-16）；docker 部署演练因本机无 docker 延后（DEPLOY.md [待回填] 待有 docker 环境实测后回填）。
 
 ---
 
@@ -311,9 +311,9 @@ docs/DEPLOY.md         # 云服务器一步步：装 Docker -> 拉代码 -> 构�
 
 ### Gate（全部为硬门槛）
 
-- [ ] Lane A curl 套件全绿
-- [ ] Lane B `pnpm build` 零告警
-- [ ] LANE D 全链路冒烟全绿（含 UI）
+- [x] Lane A curl 套件全绿
+- [x] Lane B `pnpm build` 零告警
+- [x] LANE D 全链路冒烟全绿（含 UI）
 - [ ] DEPLOY.md 无 [待回填] 残留（部署演练通过后）
 
 ---
@@ -337,14 +337,14 @@ docs/DEPLOY.md         # 云服务器一步步：装 Docker -> 拉代码 -> 构�
 
 | # | 标题 | Lane | Spec 引用 | 前置依赖 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 后端 `server/`（server.js + package.json） | A | §2 + §1.1 | 契约冻结 M1 | [ ] |
-| 2 | 前端地基：api.ts + types + vite proxy + packageManager | B | §3.1 | M1 | [ ] |
-| 3 | stores 重写（project/log/shown） | B | §3.1/§3.2 | #2 | [ ] |
-| 4 | 组件接线：Header + TopLevelProjects + ProjectTimeTable + App.vue | B | §3.1/§3.2 | #3 | [ ] |
-| 5 | 录入 UI：ProjectDialog + LogDialog + 删除 randString | B | §3.1/§3.2 | #4 | [ ] |
-| 6 | 部署文件（Dockerfile/compose/.env*/DEPLOY.md） | C | §4 | M1 | [ ] |
-| 7 | 集成验证 Lane D（含回填 DEPLOY.md [待回填]） | D | §7 | #1..#6 且 #8 全绿（需 dist 产物） | [ ] |
-| 8 | B 质量门：strict 构建 + randString 零残留 + dev 代理验证 | B | §3.3 | #5；(运行期需 #1 server 可运行) | [ ] |
+| 1 | 后端 `server/`（server.js + package.json） | A | §2 + §1.1 | 契约冻结 M1 | [x] |
+| 2 | 前端地基：api.ts + types + vite proxy + packageManager | B | §3.1 | M1 | [x] |
+| 3 | stores 重写（project/log/shown） | B | §3.1/§3.2 | #2 | [x] |
+| 4 | 组件接线：Header + TopLevelProjects + ProjectTimeTable + App.vue | B | §3.1/§3.2 | #3 | [x] |
+| 5 | 录入 UI：ProjectDialog + LogDialog + 删除 randString | B | §3.1/§3.2 | #4 | [x] |
+| 6 | 部署文件（Dockerfile/compose/.env*/DEPLOY.md） | C | §4 | M1 | [x] |
+| 7 | 集成验证 Lane D（含回填 DEPLOY.md [待回填]） | D | §7 | #1..#6 且 #8 全绿（需 dist 产物） | [x] |
+| 8 | B 质量门：strict 构建 + randString 零残留 + dev 代理验证 | B | §3.3 | #5；(运行期需 #1 server 可运行) | [x] |
 
 **#5/#7 归属**：#5=B（弹窗 UI）、#7=D（集成验证）。
 

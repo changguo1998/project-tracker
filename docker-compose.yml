@@ -1,0 +1,18 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        # 构建期令牌：烘焙进前端 bundle；与 TOKEN 互为同一共享口令的前端侧
+        VITE_API_TOKEN: ${VITE_API_TOKEN:-}
+    environment:
+      # 服务端共享口令：必填，缺失则 compose config 直接报错（与 server.js fail-fast 双重保障）
+      TOKEN: ${TOKEN:?TOKEN must be set in .env}
+      DB_PATH: /data/tracker.db
+      PORT: 3000
+    ports:
+      - "8080:3000"
+    volumes:
+      # SQLite 数据文件跨重启保留
+      - ./server/data:/data
+    restart: unless-stopped

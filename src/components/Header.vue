@@ -1,12 +1,16 @@
 <template>
     <div class="header-container">
-            <v-btn variant="outlined">Home</v-btn>
-            <v-btn variant="outlined">Sync</v-btn>
-            <v-btn variant="outlined">Settings</v-btn>
+        <v-btn variant="outlined">Home</v-btn>
+        <v-btn variant="outlined" :loading="loading" @click="emit('sync')">Sync</v-btn>
+        <v-btn variant="outlined">Settings</v-btn>
     </div>
 </template>
+
 <script setup lang="ts">
+defineProps<{ loading: boolean }>();
+const emit = defineEmits<{ (e: "sync"): void }>();
 </script>
+
 <style>
 .header-container {
     display: flex;

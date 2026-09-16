@@ -24,3 +24,8 @@ dist-ssr
 *.sw?
 .pi-glla/
 .readseek/
+
+# Lane C: 部署与数据文件
+server/data/
+.env
+.env.local

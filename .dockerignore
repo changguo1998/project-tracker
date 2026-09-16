@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+server/data
+.env*
+docs
+.trae
+.pi-glla
+.readseek
