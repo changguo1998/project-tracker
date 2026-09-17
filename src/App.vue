@@ -207,6 +207,18 @@ function columnTextColor(p: ApiProject): string {
     const hue = FAMILY_HUES[Math.max(0, order) % FAMILY_HUES.length];
     return `hsl(${hue}, 55%, 30%)`;
 }
+/** 任务卡片左条按四象限上色：
+ *  重要+紧急=红，重要不紧急=蓝，紧急不重要=黄，其余=绿
+ *  （重要：标签含 重要/重点/关键/核心；紧急：标签含 紧急/加急/急） */
+function quadrantColor(l: ApiLog): string {
+    const tags = (l.tags ?? []).join(" ");
+    const urgent = /紧急|急迫|加急|急/.test(tags);
+    const important = /重要|重点|关键|核心/.test(tags);
+    if (important && urgent) return "#ef4444";
+    if (important) return "#3b82f6";
+    if (urgent) return "#f59e0b";
+    return "#22c55e";
+}
 function toggleExpand(id: string): void {
     const s = new Set(expanded.value);
     if (s.has(id)) s.delete(id);
@@ -333,11 +345,16 @@ async function randomize(): Promise<void> {
                         tStart = fmt(startMin);
                         tEnd = fmt(Math.min(startMin + dur, toMin(SLOT_END)));
                     }
+                    const rTags =
+                        Math.random() < 0.3
+                            ? [pick(["紧急", "重点", "重要", "加急"])]
+                            : [];
                     await addLog({
                         projectID: p.id,
                         date: d,
                         summary: pick(SUMMARY_POOL),
                         detail: pick(DETAIL_POOL),
+                        tags: rTags,
                         timeStart: tStart,
                         timeEnd: tEnd,
                     });
@@ -1384,7 +1401,7 @@ onMounted(() => {
                                                                     ) *
                                                                         16 +
                                                                     'px',
-                                                                borderLeft: `4px solid ${columnTextColor(p)}`,
+                                                                borderLeft: `4px solid ${quadrantColor(l)}`,
                                                             }"
                                                             @click.stop="
                                                                 openLogEdit(l)
