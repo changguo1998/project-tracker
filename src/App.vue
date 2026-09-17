@@ -563,18 +563,19 @@ function openMulti(p: ApiProject, d: string): void {
     multiDlg.value = { open: true, project: p, date: d };
 }
 
-/* 时间槽下钻：点击日期把该行展开为 30 分钟粒度 */
+/* ---------- 浮动方块：点击日期展开为时间轴 + 按起止时间定位的卡片 ---------- */
 const SLOT_START = "08:00";
 const SLOT_END = "18:00";
-const SLOT_MIN = 30;
+const PX_PER_MIN = 2;
 const expandedDay = ref<string | null>(null);
+/** 时间精度（整点对齐网格，可全局调整） */
+const precision = ref(30);
 const toMin = (t: string): number => {
     const [h, m] = t.split(":").map(Number);
     return h * 60 + m;
 };
 const fmt = (min: number): string =>
     `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
-const nextSlot = (t: string): string => fmt(toMin(t) + SLOT_MIN);
 const inWindow = (l: ApiLog): boolean => {
     if (!l.timeStart || !l.timeEnd) return false;
     return (
@@ -584,30 +585,21 @@ const inWindow = (l: ApiLog): boolean => {
 };
 const logRange = (l: ApiLog): [number, number] => {
     const s = l.timeStart ? toMin(l.timeStart) : toMin(SLOT_START);
-    const e = l.timeEnd ? toMin(l.timeEnd) : s + SLOT_MIN;
+    const e = l.timeEnd ? toMin(l.timeEnd) : s + precision.value;
     return [s, e];
 };
-const slotEntries = (pid: string, d: string, slot: string): ApiLog[] =>
-    logs.value.filter((l) => {
-        if (l.projectID !== pid || l.date !== d) return false;
-        if (!inWindow(l)) return false;
-        const [s, e] = logRange(l);
-        const ss = toMin(slot);
-        return s < ss + SLOT_MIN && e > ss;
-    });
 const otherEntries = (pid: string, d: string): ApiLog[] =>
     logs.value.filter(
         (l) => l.projectID === pid && l.date === d && !inWindow(l),
     );
-/** 该日是否存在任意条目 */
 const dayAny = (d: string): boolean => logs.value.some((l) => l.date === d);
-/** 该日是否存在未排进时间窗口的条目 */
 const hasOther = (d: string): boolean =>
     logs.value.some((l) => l.date === d && !inWindow(l));
-/** 该日要渲染的槽：仅覆盖有内容的时间窗（首尾空档裁剪并吸附到网格） */
-const daySlots = (d: string): string[] => {
+
+/** 画布时间窗：内容范围裁剪到窗口内并吸附到精度网格（无内容返回 null） */
+const canvasOf = (d: string): { start: number; end: number } | null => {
     const timed = logs.value.filter((l) => l.date === d && inWindow(l));
-    if (!timed.length) return [];
+    if (!timed.length) return null;
     let lo = Infinity;
     let hi = -Infinity;
     for (const l of timed) {
@@ -615,12 +607,71 @@ const daySlots = (d: string): string[] => {
         if (s < lo) lo = s;
         if (e > hi) hi = e;
     }
-    lo = Math.floor(lo / SLOT_MIN) * SLOT_MIN;
-    hi = Math.ceil(hi / SLOT_MIN) * SLOT_MIN;
-    const out: string[] = [];
-    for (let m = lo; m < hi; m += SLOT_MIN) out.push(fmt(m));
+    const start = Math.max(
+        toMin(SLOT_START),
+        Math.floor(lo / precision.value) * precision.value,
+    );
+    const end = Math.min(
+        toMin(SLOT_END),
+        Math.ceil(hi / precision.value) * precision.value,
+    );
+    return { start, end: Math.max(end, start + precision.value) };
+};
+const canvasH = (d: string): number => {
+    const c = canvasOf(d);
+    return c ? (c.end - c.start) * PX_PER_MIN : 240;
+};
+const canvasEntries = (pid: string, d: string): ApiLog[] =>
+    logs.value.filter(
+        (l) => l.projectID === pid && l.date === d && inWindow(l),
+    );
+const cardTop = (l: ApiLog, c: { start: number; end: number }): number =>
+    (logRange(l)[0] - c.start) * PX_PER_MIN;
+const cardHeight = (l: ApiLog): number => {
+    const [s, e] = logRange(l);
+    return Math.max((e - s) * PX_PER_MIN, 18);
+};
+/** 同列并发条目的简单错位（不做完整分格） */
+const overlapRank = (l: ApiLog, pid: string, d: string): number => {
+    const [s, e] = logRange(l);
+    const grp = canvasEntries(pid, d)
+        .filter((x) => {
+            const [xs, xe] = logRange(x);
+            return xs < e && xe > s;
+        })
+        .sort(
+            (a, b) =>
+                logRange(a)[0] - logRange(b)[0] || a.id.localeCompare(b.id),
+        );
+    return grp.findIndex((x) => x.id === l.id);
+};
+/** 时间轴网格线：每个精度步一条，整点带标签 */
+const gridLines = (
+    c: { start: number; end: number },
+): Array<{ top: number; label: string | null }> => {
+    const out: Array<{ top: number; label: string | null }> = [];
+    for (let m = c.start; m <= c.end; m += precision.value) {
+        out.push({
+            top: (m - c.start) * PX_PER_MIN,
+            label: m % 60 === 0 ? fmt(m) : null,
+        });
+    }
     return out;
 };
+/** 点击画布空白：按 Y 换算时刻并吸附到精度网格，弹新增（带起止时间） */
+function onCanvasClick(ev: MouseEvent, p: ApiProject, d: string): void {
+    const c = canvasOf(d);
+    if (!c) return;
+    const el = ev.currentTarget as HTMLElement;
+    const rel = ev.clientY - el.getBoundingClientRect().top;
+    const minutes =
+        c.start + Math.round(rel / PX_PER_MIN / precision.value) * precision.value;
+    const snapped = Math.max(
+        c.start,
+        Math.min(c.end - precision.value, minutes),
+    );
+    openLogNew(p, d, fmt(snapped), fmt(snapped + precision.value));
+}
 function toggleDay(d: string): void {
     expandedDay.value = expandedDay.value === d ? null : d;
 }
@@ -691,6 +742,14 @@ onMounted(() => {
                         v-model="futureDays"
                         :items="[0, 3, 5, 7, 10, 14]"
                         label="未来计划"
+                        density="compact"
+                        hide-details
+                        class="future-select"
+                    />
+                    <v-select
+                        v-model="precision"
+                        :items="[10, 15, 30]"
+                        label="时间粒度"
                         density="compact"
                         hide-details
                         class="future-select"
@@ -1128,7 +1187,11 @@ onMounted(() => {
                                 <template v-else>
                                     <tr class="slot-head-row">
                                         <td class="date-col">
-                                            <span class="date-text">
+                                            <span
+                                                class="date-text click-date"
+                                                :title="'收起'"
+                                                @click="toggleDay(d)"
+                                            >
                                                 {{ d }}
                                             </span>
                                             <v-chip
@@ -1155,15 +1218,11 @@ onMounted(() => {
                                             :colspan="visibleProjects.length"
                                             class="slot-hint"
                                         >
-                                            {{ d }} 的 30 分钟日程 ·
-                                            {{ SLOT_START }}–{{ SLOT_END }}
-                                            （点击日期收起）
+                                            点击日期或箭头收起 · 时间粒度
+                                            {{ precision }} 分钟
                                         </td>
                                     </tr>
-                                    <tr
-                                        v-if="!dayAny(d)"
-                                        class="slot-none-row"
-                                    >
+                                    <tr v-if="!dayAny(d)" class="slot-none-row">
                                         <td
                                             :colspan="
                                                 visibleProjects.length + 1
@@ -1174,107 +1233,213 @@ onMounted(() => {
                                         </td>
                                     </tr>
                                     <template v-else>
-                                    <tr
-                                        v-for="slot in daySlots(d)"
-                                        :key="slot"
-                                    >
-                                        <td class="date-col slot-time-col">
-                                            <span class="slot-time">
-                                                {{ slot }}
-                                            </span>
-                                        </td>
-                                        <td
-                                            v-for="p in visibleProjects"
-                                            :key="p.id"
-                                            class="cell"
-                                            :style="{
-                                                backgroundColor:
-                                                    columnBgColor(p),
-                                            }"
-                                        >
-                                            <template
-                                                v-if="
-                                                    slotEntries(
-                                                        p.id,
-                                                        d,
-                                                        slot,
-                                                    ).length
-                                                "
-                                            >
-                                                <div
-                                                    v-for="l in slotEntries(
-                                                        p.id,
-                                                        d,
-                                                        slot,
-                                                    )"
-                                                    :key="l.id"
-                                                    class="slot-entry clickable"
-                                                    :class="{
-                                                        'line-done': l.done,
+                                        <template v-if="canvasOf(d)">
+                                            <tr class="canvas-row">
+                                                <td class="date-col canvas-axis-col">
+                                                    <div
+                                                        class="canvas-axis"
+                                                        :style="{
+                                                            height:
+                                                                canvasH(d) +
+                                                                'px',
+                                                        }"
+                                                    >
+                                                        <template
+                                                            v-for="g in gridLines(
+                                                                canvasOf(d)!,
+                                                            )"
+                                                            :key="g.top"
+                                                        >
+                                                            <div
+                                                                class="axis-line"
+                                                                :class="{
+                                                                    'axis-hour':
+                                                                        g.label,
+                                                                }"
+                                                                :style="{
+                                                                    top:
+                                                                        g.top +
+                                                                        'px',
+                                                                }"
+                                                            />
+                                                            <span
+                                                                v-if="g.label"
+                                                                class="axis-label"
+                                                                :style="{
+                                                                    top:
+                                                                        g.top +
+                                                                        'px',
+                                                                }"
+                                                            >
+                                                                {{ g.label }}
+                                                            </span>
+                                                        </template>
+                                                    </div>
+                                                </td>
+                                                <td
+                                                    v-for="p in visibleProjects"
+                                                    :key="p.id"
+                                                    class="cell canvas-cell"
+                                                    :style="{
+                                                        backgroundColor:
+                                                            columnBgColor(p),
                                                     }"
-                                                    :title="`${l.timeStart ?? ''}${l.timeEnd ? '–' + l.timeEnd : ''} · ${l.summary}${metaText(l) ? '\n' + metaText(l) : ''}`"
-                                                    @click="openLogEdit(l)"
                                                 >
-                                                    {{ l.summary }}
-                                                </div>
-                                            </template>
-                                            <span
-                                                v-else
-                                                class="slot-add clickable"
-                                                @click="
-                                                    openLogNew(
-                                                        p,
-                                                        d,
-                                                        slot,
-                                                        nextSlot(slot),
-                                                    )
-                                                "
-                                            >
-                                                ＋
-                                            </span>
-                                        </td>
-                                    </tr>
-                                    <tr
-                                        v-if="hasOther(d)"
-                                        class="slot-other-row"
-                                    >
-                                        <td class="date-col slot-time-col">
-                                            <span class="slot-time">其他</span>
-                                        </td>
-                                        <td
-                                            v-for="p in visibleProjects"
-                                            :key="p.id"
-                                            class="cell"
-                                            :style="{
-                                                backgroundColor:
-                                                    columnBgColor(p),
-                                            }"
+                                                    <div
+                                                        class="day-canvas"
+                                                        :style="{
+                                                            height:
+                                                                canvasH(d) +
+                                                                'px',
+                                                        }"
+                                                        @click.self="
+                                                            onCanvasClick(
+                                                                $event,
+                                                                p,
+                                                                d,
+                                                            )
+                                                        "
+                                                    >
+                                                        <div
+                                                            v-for="g in gridLines(
+                                                                canvasOf(d)!,
+                                                            )"
+                                                            :key="'g' + g.top"
+                                                            class="grid-line"
+                                                            :class="{
+                                                                'grid-hour':
+                                                                    g.label,
+                                                            }"
+                                                            :style="{
+                                                                top:
+                                                                    g.top +
+                                                                    'px',
+                                                            }"
+                                                        />
+                                                        <div
+                                                            v-for="l in canvasEntries(
+                                                                p.id,
+                                                                d,
+                                                            )"
+                                                            :key="l.id"
+                                                            class="floating-card"
+                                                            :class="{
+                                                                'line-done':
+                                                                    l.done,
+                                                            }"
+                                                            :style="{
+                                                                top:
+                                                                    cardTop(
+                                                                        l,
+                                                                        canvasOf(
+                                                                            d,
+                                                                        )!,
+                                                                    ) + 'px',
+                                                                height:
+                                                                    cardHeight(
+                                                                        l,
+                                                                    ) + 'px',
+                                                                left:
+                                                                    6 +
+                                                                    overlapRank(
+                                                                        l,
+                                                                        p.id,
+                                                                        d,
+                                                                    ) *
+                                                                        16 +
+                                                                    'px',
+                                                                right:
+                                                                    6 +
+                                                                    overlapRank(
+                                                                        l,
+                                                                        p.id,
+                                                                        d,
+                                                                    ) *
+                                                                        16 +
+                                                                    'px',
+                                                                borderLeft: `4px solid ${columnTextColor(p)}`,
+                                                            }"
+                                                            @click.stop="
+                                                                openLogEdit(l)
+                                                            "
+                                                        >
+                                                            <span
+                                                                v-if="
+                                                                    l.timeStart
+                                                                "
+                                                                class="fc-time"
+                                                            >
+                                                                {{
+                                                                    l.timeStart
+                                                                }}
+                                                                {{
+                                                                    l.timeEnd
+                                                                        ? `–${l.timeEnd}`
+                                                                        : ""
+                                                                }}
+                                                            </span>
+                                                            <span
+                                                                class="fc-summary"
+                                                            >
+                                                                {{ l.summary }}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                        <tr
+                                            v-if="hasOther(d)"
+                                            class="slot-other-row"
                                         >
-                                            <template
-                                                v-if="
-                                                    otherEntries(p.id, d).length
-                                                "
+                                            <td class="date-col slot-time-col">
+                                                <span class="slot-time">
+                                                    其他
+                                                </span>
+                                            </td>
+                                            <td
+                                                v-for="p in visibleProjects"
+                                                :key="p.id"
+                                                class="cell"
+                                                :style="{
+                                                    backgroundColor:
+                                                        columnBgColor(p),
+                                                }"
                                             >
-                                                <div
-                                                    v-for="l in otherEntries(
-                                                        p.id,
-                                                        d,
-                                                    )"
-                                                    :key="l.id"
-                                                    class="slot-entry clickable"
-                                                    :class="{
-                                                        'line-done': l.done,
-                                                    }"
-                                                    @click="openLogEdit(l)"
+                                                <template
+                                                    v-if="
+                                                        otherEntries(
+                                                            p.id,
+                                                            d,
+                                                        ).length
+                                                    "
                                                 >
-                                                    {{ l.summary }}
-                                                </div>
-                                            </template>
-                                            <span v-else class="slot-dot">
-                                                ·
-                                            </span>
-                                        </td>
-                                    </tr>
+                                                    <div
+                                                        v-for="l in otherEntries(
+                                                            p.id,
+                                                            d,
+                                                        )"
+                                                        :key="l.id"
+                                                        class="slot-entry clickable"
+                                                        :class="{
+                                                            'line-done':
+                                                                l.done,
+                                                        }"
+                                                        @click="
+                                                            openLogEdit(l)
+                                                        "
+                                                    >
+                                                        {{ l.summary }}
+                                                    </div>
+                                                </template>
+                                                <span
+                                                    v-else
+                                                    class="slot-dot"
+                                                >
+                                                    ·
+                                                </span>
+                                            </td>
+                                        </tr>
                                     </template>
                                 </template>
                                 </template>
@@ -1346,6 +1511,7 @@ onMounted(() => {
                             v-model="logDlg.timeStart"
                             label="开始时间"
                             type="time"
+                            :step="precision"
                             density="compact"
                             hide-details
                         />
@@ -1353,6 +1519,7 @@ onMounted(() => {
                             v-model="logDlg.timeEnd"
                             label="结束时间"
                             type="time"
+                            :step="precision"
                             density="compact"
                             hide-details
                         />
@@ -1883,6 +2050,73 @@ tr:hover .slot-add {
 }
 .slot-other-row td {
     border-top: 1px dashed #e2e8f0;
+}
+
+/* 浮动方块时间轴与画布 */
+.canvas-axis-col {
+    padding: 0 !important;
+    width: 62px;
+    min-width: 62px;
+}
+.canvas-axis {
+    position: relative;
+}
+.axis-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    border-top: 1px solid #e2e8f0;
+}
+.axis-line.axis-hour {
+    border-top-color: #cbd5e1;
+}
+.axis-label {
+    position: absolute;
+    left: 6px;
+    transform: translateY(-6px);
+    font-size: 11px;
+    color: #64748b;
+}
+.canvas-cell {
+    padding: 0 !important;
+    vertical-align: top;
+}
+.day-canvas {
+    position: relative;
+    overflow: hidden;
+}
+.grid-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    border-top: 1px solid rgba(203, 213, 225, 0.35);
+}
+.grid-line.grid-hour {
+    border-top-color: rgba(148, 163, 184, 0.5);
+}
+.floating-card {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+    padding: 2px 6px;
+    font-size: 12px;
+    color: #334155;
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.floating-card:hover {
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.2);
+}
+.fc-time {
+    color: #64748b;
+    margin-right: 4px;
+}
+.fc-summary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
 }
 .slot-none-row td {
     padding: 20px 14px;
