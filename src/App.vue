@@ -1950,12 +1950,13 @@ td.cell-empty:hover {
     cursor: pointer;
 }
 .plus {
-    color: #94a3b8;
-    font-size: 14px;
-    transition: color 0.15s;
-}
-tr:hover .plus {
     color: #2563eb;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+td.cell-empty:hover .plus {
+    opacity: 1;
 }
 .log {
     display: flex;
