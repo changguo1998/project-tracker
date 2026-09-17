@@ -641,6 +641,7 @@ onMounted(() => {
                     <div class="test-group">
                         <span class="test-label">测试</span>
                         <v-btn
+                            color="error"
                             variant="tonal"
                             :disabled="busy || !hasData"
                             prepend-icon="mdi-delete-outline"
