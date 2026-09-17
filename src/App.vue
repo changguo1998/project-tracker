@@ -574,13 +574,6 @@ const toMin = (t: string): number => {
 };
 const fmt = (min: number): string =>
     `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
-const slots = computed<string[]>(() => {
-    const out: string[] = [];
-    for (let m = toMin(SLOT_START); m < toMin(SLOT_END); m += SLOT_MIN) {
-        out.push(fmt(m));
-    }
-    return out;
-});
 const nextSlot = (t: string): string => fmt(toMin(t) + SLOT_MIN);
 const inWindow = (l: ApiLog): boolean => {
     if (!l.timeStart || !l.timeEnd) return false;
@@ -606,6 +599,28 @@ const otherEntries = (pid: string, d: string): ApiLog[] =>
     logs.value.filter(
         (l) => l.projectID === pid && l.date === d && !inWindow(l),
     );
+/** 该日是否存在任意条目 */
+const dayAny = (d: string): boolean => logs.value.some((l) => l.date === d);
+/** 该日是否存在未排进时间窗口的条目 */
+const hasOther = (d: string): boolean =>
+    logs.value.some((l) => l.date === d && !inWindow(l));
+/** 该日要渲染的槽：仅覆盖有内容的时间窗（首尾空档裁剪并吸附到网格） */
+const daySlots = (d: string): string[] => {
+    const timed = logs.value.filter((l) => l.date === d && inWindow(l));
+    if (!timed.length) return [];
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (const l of timed) {
+        const [s, e] = logRange(l);
+        if (s < lo) lo = s;
+        if (e > hi) hi = e;
+    }
+    lo = Math.floor(lo / SLOT_MIN) * SLOT_MIN;
+    hi = Math.ceil(hi / SLOT_MIN) * SLOT_MIN;
+    const out: string[] = [];
+    for (let m = lo; m < hi; m += SLOT_MIN) out.push(fmt(m));
+    return out;
+};
 function toggleDay(d: string): void {
     expandedDay.value = expandedDay.value === d ? null : d;
 }
@@ -1145,7 +1160,24 @@ onMounted(() => {
                                             （点击日期收起）
                                         </td>
                                     </tr>
-                                    <tr v-for="slot in slots" :key="slot">
+                                    <tr
+                                        v-if="!dayAny(d)"
+                                        class="slot-none-row"
+                                    >
+                                        <td
+                                            :colspan="
+                                                visibleProjects.length + 1
+                                            "
+                                            class="slot-none"
+                                        >
+                                            当日无安排 · 点击该日项目格 ＋ 添加安排
+                                        </td>
+                                    </tr>
+                                    <template v-else>
+                                    <tr
+                                        v-for="slot in daySlots(d)"
+                                        :key="slot"
+                                    >
                                         <td class="date-col slot-time-col">
                                             <span class="slot-time">
                                                 {{ slot }}
@@ -1202,7 +1234,10 @@ onMounted(() => {
                                             </span>
                                         </td>
                                     </tr>
-                                    <tr class="slot-other-row">
+                                    <tr
+                                        v-if="hasOther(d)"
+                                        class="slot-other-row"
+                                    >
                                         <td class="date-col slot-time-col">
                                             <span class="slot-time">其他</span>
                                         </td>
@@ -1240,6 +1275,7 @@ onMounted(() => {
                                             </span>
                                         </td>
                                     </tr>
+                                    </template>
                                 </template>
                                 </template>
                             </tbody>
@@ -1847,6 +1883,14 @@ tr:hover .slot-add {
 }
 .slot-other-row td {
     border-top: 1px dashed #e2e8f0;
+}
+.slot-none-row td {
+    padding: 20px 14px;
+    text-align: center;
+}
+.slot-none {
+    color: #94a3b8;
+    font-size: 13px;
 }
 
 /* 时间输入行 */
