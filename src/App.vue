@@ -51,6 +51,17 @@ const DETAIL_POOL = [
     "梳理历史遗留技术债",
     "补充多浏览器兼容处理",
 ];
+
+const CHILD_POOL = [
+    "需求调研",
+    "方案设计",
+    "UI 实现",
+    "接口开发",
+    "联调测试",
+    "上线部署",
+    "数据核对",
+    "运维监控",
+];
 const STATUS: TaskStatus[] = ["plan", "progress", "failed", "done", "delay"];
 const STATUS_NAME: Record<TaskStatus, string> = {
     plan: "计划",
@@ -190,6 +201,21 @@ async function randomize(): Promise<void> {
         const created: ApiProject[] = [];
         for (const name of names) {
             created.push(await addProject({ parentID: null, name }));
+        }
+        // 约半数顶层项目随机挂 1~2 个子项目，验证子树层级/折叠
+        const childPool = CHILD_POOL.slice().sort(() => Math.random() - 0.5);
+        for (const p of created.slice()) {
+            if (Math.random() < 0.5 && childPool.length) {
+                const k = 1 + Math.floor(Math.random() * 2); // 1~2 个
+                for (let i = 0; i < k && childPool.length; i++) {
+                    created.push(
+                        await addProject({
+                            parentID: p.id,
+                            name: childPool.pop()!,
+                        }),
+                    );
+                }
+            }
         }
         for (const p of created) {
             for (const d of dates.value) {
