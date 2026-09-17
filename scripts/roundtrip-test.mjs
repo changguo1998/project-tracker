@@ -230,18 +230,29 @@ async function run() {
                 timeStart: opts.timeStart ?? null,
                 timeEnd: opts.timeEnd ?? null,
                 done: opts.done ?? false,
+                urgent: opts.urgent ?? false,
+                important: opts.important ?? false,
             }),
         });
     const l1 = (
-        await mkLog("联调进行中", { timeStart: "09:30", timeEnd: "10:00" })
+        await mkLog("联调进行中", {
+            timeStart: "09:30",
+            timeEnd: "10:00",
+            urgent: true,
+            important: true,
+        })
     ).log;
     const l2 = (await mkLog("已完成联调", { timeStart: "14:00", done: true }))
         .log;
     createdLogs.push(l1, l2);
     assert(l1.id !== l2.id, "同日两条日志 id 应不同");
     assert(
-        l1.timeStart === "09:30" && l1.timeEnd === "10:00" && l1.done === false,
-        "时间/完成字段未正确回显",
+        l1.timeStart === "09:30" &&
+            l1.timeEnd === "10:00" &&
+            l1.done === false &&
+            l1.urgent === true &&
+            l1.important === true,
+        "时间/完成/紧急/重要字段未正确回显",
     );
     assert(l2.done === true, "l2 完成标记未回显");
 
@@ -272,13 +283,17 @@ async function run() {
                 summary: "联调超时",
                 tags: ["全量"],
                 done: true,
+                urgent: false,
+                important: false,
             }),
         })
     ).log;
     assert(
         patched.summary === "联调超时" &&
             patched.tags.join(",") === "全量" &&
-            patched.done === true,
+            patched.done === true &&
+            patched.urgent === false &&
+            patched.important === false,
         "PATCH 日志未生效",
     );
     Object.assign(l1, patched);
@@ -313,6 +328,8 @@ async function run() {
                 got.timeStart === (l.timeStart ?? null) &&
                 got.timeEnd === (l.timeEnd ?? null) &&
                 Boolean(got.done) === Boolean(l.done) &&
+                Boolean(got.urgent) === Boolean(l.urgent) &&
+                Boolean(got.important) === Boolean(l.important) &&
                 got.category === (l.category ?? null) &&
                 (got.tags ?? []).join(",") === (l.tags ?? []).join(","),
             `日志 ${l.id} 字段不一致`,

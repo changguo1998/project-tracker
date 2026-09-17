@@ -32,6 +32,10 @@ export interface LogRec {
     timeEnd: string | null;
     /** 完成标记（逐条粒度） */
     done: boolean;
+    /** 紧急标记（独立设置，不混入标签） */
+    urgent: boolean;
+    /** 重要标记（独立设置，不混入标签） */
+    important: boolean;
 }
 
 /** API 层别名，便于 api.ts 契约清晰表达 */

@@ -50,6 +50,10 @@ if (!logCols.includes("timeEnd"))
   db.exec("ALTER TABLE logs ADD COLUMN timeEnd TEXT");
 if (!logCols.includes("done"))
   db.exec("ALTER TABLE logs ADD COLUMN done INTEGER");
+if (!logCols.includes("urgent"))
+  db.exec("ALTER TABLE logs ADD COLUMN urgent INTEGER");
+if (!logCols.includes("important"))
+  db.exec("ALTER TABLE logs ADD COLUMN important INTEGER");
 
 // 幂等迁移：老库 projects 无 status 列则补齐
 const projCols = db
@@ -117,10 +121,16 @@ app.get("/api/state", (_req, res) => {
   };
   const logs = db
     .prepare(
-      "SELECT id, projectID, date, summary, detail, category, tags, timeStart, timeEnd, done FROM logs ORDER BY date",
+      "SELECT id, projectID, date, summary, detail, category, tags, timeStart, timeEnd, done, urgent, important FROM logs ORDER BY date",
     )
     .all()
-    .map((l) => ({ ...l, tags: parseTags(l.tags) }));
+    .map((l) => ({
+      ...l,
+      tags: parseTags(l.tags),
+      done: !!l.done,
+      urgent: !!l.urgent,
+      important: !!l.important,
+    }));
   res.json({ projects, logs });
 });
 
@@ -287,6 +297,10 @@ app.post("/api/logs", (req, res) => {
     return res.status(400).json(bodyError("timeEnd: 不能早于 timeStart"));
   if (b.done !== undefined && typeof b.done !== "boolean")
     return res.status(400).json(bodyError("done: 布尔"));
+  if (b.urgent !== undefined && typeof b.urgent !== "boolean")
+    return res.status(400).json(bodyError("urgent: 布尔"));
+  if (b.important !== undefined && typeof b.important !== "boolean")
+    return res.status(400).json(bodyError("important: 布尔"));
 
   const summary = b.summary ?? "";
   const detail = b.detail ?? "";
@@ -295,8 +309,10 @@ app.post("/api/logs", (req, res) => {
   const timeStart = b.timeStart ?? null;
   const timeEnd = b.timeEnd ?? null;
   const done = b.done ? 1 : 0;
+  const urgent = b.urgent ? 1 : 0;
+  const important = b.important ? 1 : 0;
   db.prepare(
-    "INSERT INTO logs(id, projectID, date, summary, detail, category, tags, timeStart, timeEnd, done, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    "INSERT INTO logs(id, projectID, date, summary, detail, category, tags, timeStart, timeEnd, done, urgent, important, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
   ).run(
     id,
     b.projectID,
@@ -308,6 +324,8 @@ app.post("/api/logs", (req, res) => {
     timeStart,
     timeEnd,
     done,
+    urgent,
+    important,
     now(),
   );
   const log = {
@@ -321,6 +339,8 @@ app.post("/api/logs", (req, res) => {
     timeStart,
     timeEnd,
     done: b.done ?? false,
+    urgent: b.urgent ?? false,
+    important: b.important ?? false,
   };
   res.status(201).json({ id, log });
 });
@@ -348,6 +368,8 @@ app.patch("/api/logs/:id", (req, res) => {
     "timeStart",
     "timeEnd",
     "done",
+    "urgent",
+    "important",
   ]) {
     if (key in b) fields[key] = b[key];
   }
@@ -400,8 +422,14 @@ app.patch("/api/logs/:id", (req, res) => {
     return res.status(400).json(bodyError("timeEnd: 不能早于 timeStart"));
   if ("done" in fields && typeof fields.done !== "boolean")
     return res.status(400).json(bodyError("done: 布尔"));
+  if ("urgent" in fields && typeof fields.urgent !== "boolean")
+    return res.status(400).json(bodyError("urgent: 布尔"));
+  if ("important" in fields && typeof fields.important !== "boolean")
+    return res.status(400).json(bodyError("important: 布尔"));
   if ("tags" in fields) fields.tags = JSON.stringify(fields.tags);
   if ("done" in fields) fields.done = fields.done ? 1 : 0;
+  if ("urgent" in fields) fields.urgent = fields.urgent ? 1 : 0;
+  if ("important" in fields) fields.important = fields.important ? 1 : 0;
 
   const assignments = Object.keys(fields)
     .map((k) => `${k} = ?`)
@@ -413,7 +441,7 @@ app.patch("/api/logs/:id", (req, res) => {
   );
   const row = db
     .prepare(
-      "SELECT id, projectID, date, summary, detail, category, tags, timeStart, timeEnd, done FROM logs WHERE id = ?",
+      "SELECT id, projectID, date, summary, detail, category, tags, timeStart, timeEnd, done, urgent, important FROM logs WHERE id = ?",
     )
     .get(req.params.id);
   let tagsArr = [];
@@ -423,7 +451,15 @@ app.patch("/api/logs/:id", (req, res) => {
   } catch {
     // 历史脏数据，按空标签处理
   }
-  res.json({ log: { ...row, tags: tagsArr, done: !!row.done } });
+  res.json({
+    log: {
+      ...row,
+      tags: tagsArr,
+      done: !!row.done,
+      urgent: !!row.urgent,
+      important: !!row.important,
+    },
+  });
 });
 
 // DELETE /api/logs/:id

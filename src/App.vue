@@ -82,7 +82,7 @@ const CATEGORY_POOL = [
     "运维",
     "其他",
 ];
-const DEFAULT_TAGS = ["紧急", "阻塞", "重点", "本周"];
+const DEFAULT_TAGS = ["阻塞", "本周"];
 const DAYS = 14;
 /** 表格只展示到该层级：0=仅根，1=根+直接子级 */
 const MAX_DEPTH = 1;
@@ -211,12 +211,9 @@ function columnTextColor(p: ApiProject): string {
  *  重要+紧急=红，重要不紧急=蓝，紧急不重要=黄，其余=绿
  *  （重要：标签含 重要/重点/关键/核心；紧急：标签含 紧急/加急/急） */
 function quadrantColor(l: ApiLog): string {
-    const tags = (l.tags ?? []).join(" ");
-    const urgent = /紧急|急迫|加急|急/.test(tags);
-    const important = /重要|重点|关键|核心/.test(tags);
-    if (important && urgent) return "#ef4444";
-    if (important) return "#3b82f6";
-    if (urgent) return "#f59e0b";
+    if (l.important && l.urgent) return "#ef4444";
+    if (l.important) return "#3b82f6";
+    if (l.urgent) return "#f59e0b";
     return "#22c55e";
 }
 function toggleExpand(id: string): void {
@@ -345,16 +342,16 @@ async function randomize(): Promise<void> {
                         tStart = fmt(startMin);
                         tEnd = fmt(Math.min(startMin + dur, toMin(SLOT_END)));
                     }
-                    const rTags =
-                        Math.random() < 0.3
-                            ? [pick(["紧急", "重点", "重要", "加急"])]
-                            : [];
+                    const rUrgent = Math.random() < 0.15;
+                    const rImportant = Math.random() < 0.3;
                     await addLog({
                         projectID: p.id,
                         date: d,
                         summary: pick(SUMMARY_POOL),
                         detail: pick(DETAIL_POOL),
-                        tags: rTags,
+                        tags: [],
+                        urgent: rUrgent,
+                        important: rImportant,
                         timeStart: tStart,
                         timeEnd: tEnd,
                     });
@@ -479,6 +476,8 @@ interface LogDlg {
     timeStart: string;
     timeEnd: string;
     done: boolean;
+    urgent: boolean;
+    important: boolean;
 }
 const logDlg = ref<LogDlg>({
     open: false,
@@ -492,6 +491,8 @@ const logDlg = ref<LogDlg>({
     timeStart: "",
     timeEnd: "",
     done: false,
+    urgent: false,
+    important: false,
 });
 function openLogNew(
     p: ApiProject,
@@ -512,6 +513,8 @@ function openLogNew(
         timeStart,
         timeEnd,
         done: false,
+        urgent: false,
+        important: false,
     };
 }
 function openLogEdit(l: ApiLog): void {
@@ -529,6 +532,8 @@ function openLogEdit(l: ApiLog): void {
         timeStart: l.timeStart ?? "",
         timeEnd: l.timeEnd ?? "",
         done: l.done,
+        urgent: l.urgent,
+        important: l.important,
     };
 }
 async function saveLog(): Promise<void> {
@@ -546,6 +551,8 @@ async function saveLog(): Promise<void> {
                 timeStart: d.timeStart || null,
                 timeEnd: d.timeEnd || null,
                 done: d.done,
+                urgent: d.urgent,
+                important: d.important,
             });
         } else {
             await addLog({
@@ -558,6 +565,8 @@ async function saveLog(): Promise<void> {
                 timeStart: d.timeStart || null,
                 timeEnd: d.timeEnd || null,
                 done: d.done,
+                urgent: d.urgent,
+                important: d.important,
             });
         }
         d.open = false;
@@ -1175,6 +1184,26 @@ onMounted(() => {
                                                 class="log"
                                                 :title="`${primaryLog(p.id, d)!.summary}${metaText(primaryLog(p.id, d)!) ? '\n' + metaText(primaryLog(p.id, d)!) : ''}`"
                                             >
+                                                <v-icon
+                                                    v-if="
+                                                        primaryLog(p.id, d)!
+                                                            .urgent
+                                                    "
+                                                    size="x-small"
+                                                    color="#f59e0b"
+                                                >
+                                                    mdi-lightning-bolt
+                                                </v-icon>
+                                                <v-icon
+                                                    v-if="
+                                                        primaryLog(p.id, d)!
+                                                            .important
+                                                    "
+                                                    size="x-small"
+                                                    color="#3b82f6"
+                                                >
+                                                    mdi-star
+                                                </v-icon>
                                                 <span
                                                     v-if="primaryLog(p.id, d)!.timeStart"
                                                     class="cell-time"
@@ -1407,6 +1436,24 @@ onMounted(() => {
                                                                 openLogEdit(l)
                                                             "
                                                         >
+                                                            <v-icon
+                                                                v-if="l.urgent"
+                                                                size="x-small"
+                                                                color="#f59e0b"
+                                                                class="fc-flag"
+                                                            >
+                                                                mdi-lightning-bolt
+                                                            </v-icon>
+                                                            <v-icon
+                                                                v-if="
+                                                                    l.important
+                                                                "
+                                                                size="x-small"
+                                                                color="#3b82f6"
+                                                                class="fc-flag"
+                                                            >
+                                                                mdi-star
+                                                            </v-icon>
                                                             <span
                                                                 v-if="
                                                                     l.timeStart
@@ -1473,6 +1520,22 @@ onMounted(() => {
                                                             openLogEdit(l)
                                                         "
                                                     >
+                                                        <v-icon
+                                                            v-if="l.urgent"
+                                                            size="x-small"
+                                                            color="#f59e0b"
+                                                        >
+                                                            mdi-lightning-bolt
+                                                        </v-icon>
+                                                        <v-icon
+                                                            v-if="
+                                                                l.important
+                                                            "
+                                                            size="x-small"
+                                                            color="#3b82f6"
+                                                        >
+                                                            mdi-star
+                                                        </v-icon>
                                                         {{ l.summary }}
                                                     </div>
                                                 </template>
@@ -1575,6 +1638,22 @@ onMounted(() => {
                             class="done-check"
                         />
                     </div>
+                    <div class="flag-row">
+                        <v-checkbox
+                            v-model="logDlg.urgent"
+                            label="紧急"
+                            density="compact"
+                            hide-details
+                            color="#f59e0b"
+                        />
+                        <v-checkbox
+                            v-model="logDlg.important"
+                            label="重要"
+                            density="compact"
+                            hide-details
+                            color="#3b82f6"
+                        />
+                    </div>
                     <v-combobox
                         v-model="logDlg.category"
                         :items="CATEGORY_POOL"
@@ -1646,6 +1725,20 @@ onMounted(() => {
                             <v-list-item-title
                                 :class="{ 'line-done': l.done }"
                             >
+                                <v-icon
+                                    v-if="l.urgent"
+                                    size="x-small"
+                                    color="#f59e0b"
+                                >
+                                    mdi-lightning-bolt
+                                </v-icon>
+                                <v-icon
+                                    v-if="l.important"
+                                    size="x-small"
+                                    color="#3b82f6"
+                                >
+                                    mdi-star
+                                </v-icon>
                                 <template v-if="l.timeStart">
                                     <span class="cell-time">
                                         {{ l.timeStart }}
