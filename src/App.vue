@@ -1278,7 +1278,7 @@ onMounted(() => {
 }
 .table-scroll {
     overflow: auto;
-    max-height: calc(100vh - 128px);
+    max-height: calc(100vh - 200px);
 }
 table {
     border-collapse: separate;
@@ -1289,8 +1289,6 @@ table {
 }
 thead th {
     position: sticky;
-    top: 0;
-    z-index: 5;
     background: #f8fafc;
     color: #475569;
     font-weight: 600;
@@ -1299,6 +1297,20 @@ thead th {
     border-bottom: 1px solid #e2e8f0;
     white-space: nowrap;
     font-size: 14px;
+}
+/* 单行表头：贴顶 */
+thead tr:only-child th {
+    top: 0;
+    z-index: 6;
+}
+/* 双行表头：分组带行贴顶，底排行下移到分组带高度之下 */
+thead tr:first-child:not(:only-child) th {
+    top: 0;
+    z-index: 7;
+}
+thead tr:last-child:not(:only-child) th {
+    top: 40px;
+    z-index: 6;
 }
 tbody td {
     padding: 8px 14px;
