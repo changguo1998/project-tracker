@@ -608,22 +608,6 @@ onMounted(() => {
                         class="future-select"
                     />
                     <v-btn
-                        variant="tonal"
-                        :disabled="busy || !hasData"
-                        prepend-icon="mdi-delete-outline"
-                        @click="clear"
-                    >
-                        清空
-                    </v-btn>
-                    <v-btn
-                        variant="outlined"
-                        :disabled="busy"
-                        prepend-icon="mdi-plus"
-                        @click="openNewProject(null)"
-                    >
-                        新建项目
-                    </v-btn>
-                    <v-btn
                         icon
                         size="small"
                         variant="text"
@@ -644,14 +628,35 @@ onMounted(() => {
                         <v-icon>mdi-arrow-expand-all</v-icon>
                     </v-btn>
                     <v-btn
-                        color="primary"
+                        variant="outlined"
                         :disabled="busy"
-                        prepend-icon="mdi-dice-5"
-                        @click="randomize"
+                        prepend-icon="mdi-plus"
+                        @click="openNewProject(null)"
                     >
-                        随机生成数据
+                        新建项目
                     </v-btn>
-                </div>
+
+                    <v-divider vertical class="mx-2" />
+
+                    <div class="test-group">
+                        <span class="test-label">测试</span>
+                        <v-btn
+                            variant="tonal"
+                            :disabled="busy || !hasData"
+                            prepend-icon="mdi-delete-outline"
+                            @click="clear"
+                        >
+                            清空
+                        </v-btn>
+                        <v-btn
+                            color="primary"
+                            :disabled="busy"
+                            prepend-icon="mdi-dice-5"
+                            @click="randomize"
+                        >
+                            随机生成数据
+                        </v-btn>
+                    </div>                </div>
             </template>
         </v-app-bar>
 
@@ -1235,6 +1240,19 @@ onMounted(() => {
 }
 
 /* ---------- 标题栏 ---------- */
+.test-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 2px 10px;
+    background: #f1f5f9;
+    border-radius: 8px;
+}
+.test-label {
+    font-size: 12px;
+    color: #94a3b8;
+    white-space: nowrap;
+}
 .brand {
     display: flex;
     align-items: center;
