@@ -139,6 +139,32 @@ const visibleProjects = computed<ApiProject[]>(() => {
     return acc;
 });
 
+
+/* ---------- 多行树形表头 ---------- */
+/** 表头层级行号（0..maxLevel），根在 0 行、子级在下 */
+const headerLevels = computed<number[]>(() => {
+    const max = visibleProjects.value.reduce(
+        (m, p) => Math.max(m, p.level),
+        0,
+    );
+    const arr: number[] = [];
+    for (let i = 0; i <= max; i++) arr.push(i);
+    return arr;
+});
+/** 该表头单元格下跨行数：覆盖其当前可见的最深子孙 */
+function headerRowspan(p: ApiProject): number {
+    let bottom = p.level;
+    const walk = (pp: ApiProject): void => {
+        for (const c of childrenOf(pp.id)) {
+            if (visibleProjects.value.includes(c)) {
+                bottom = Math.max(bottom, c.level);
+                walk(c);
+            }
+        }
+    };
+    walk(p);
+    return bottom - p.level + 1;
+}
 function toggleExpand(id: string): void {
     const s = new Set(expanded.value);
     if (s.has(id)) s.delete(id);
@@ -574,17 +600,104 @@ onMounted(() => {
                     <div class="table-scroll">
                         <table>
                             <thead>
-                                <tr>
-                                    <th class="proj-col">项目</th>
+                                <tr v-for="lv in headerLevels" :key="lv">
                                     <th
-                                        v-for="d in dates"
-                                        :key="d"
-                                        class="date-head"
-                                        :class="{
-                                            'col-today': isToday(d),
-                                            'col-weekend': isWeekend(d),
-                                        }"
+                                        class="date-col"
+                                        :rowspan="headerLevels.length"
                                     >
+                                        日期
+                                    </th>
+                                    <template
+                                        v-for="p in visibleProjects"
+                                        :key="p.id"
+                                    >
+                                        <th
+                                            v-if="p.level === lv"
+                                            :rowspan="headerRowspan(p)"
+                                        >
+                                            <div
+                                                class="proj-head"
+                                                :style="{
+                                                    paddingLeft:
+                                                        p.level * 14 + 'px',
+                                                }"
+                                            >
+                                                <v-btn
+                                                    v-if="hasChildren(p.id)"
+                                                    icon
+                                                    size="x-small"
+                                                    variant="plain"
+                                                    class="caret"
+                                                    @click.stop="toggleExpand(p.id)"
+                                                >
+                                                    <v-icon>
+                                                        {{
+                                                            expanded.has(p.id)
+                                                                ? "mdi-chevron-down"
+                                                                : "mdi-chevron-right"
+                                                        }}
+                                                    </v-icon>
+                                                </v-btn>
+                                                <span
+                                                    class="proj-name"
+                                                    :title="p.name"
+                                                    @click="openRename(p)"
+                                                >
+                                                    {{ p.name }}
+                                                </span>
+                                                <v-menu location="bottom">
+                                                    <template
+                                                        #activator="{ props }"
+                                                    >
+                                                        <v-btn
+                                                            v-bind="props"
+                                                            icon
+                                                            size="x-small"
+                                                            variant="plain"
+                                                            class="proj-more"
+                                                        >
+                                                            <v-icon>
+                                                                mdi-dots-horizontal
+                                                            </v-icon>
+                                                        </v-btn>
+                                                    </template>
+                                                    <v-list density="compact">
+                                                        <v-list-item
+                                                            prepend-icon="mdi-folder-plus"
+                                                            @click="openNewChild(p)"
+                                                        >
+                                                            新建子项目
+                                                        </v-list-item>
+                                                        <v-list-item
+                                                            prepend-icon="mdi-pencil"
+                                                            @click="openRename(p)"
+                                                        >
+                                                            重命名
+                                                        </v-list-item>
+                                                        <v-list-item
+                                                            prepend-icon="mdi-delete"
+                                                            class="danger-item"
+                                                            @click="askDeleteProject(p)"
+                                                        >
+                                                            删除
+                                                        </v-list-item>
+                                                    </v-list>
+                                                </v-menu>
+                                            </div>
+                                        </th>
+                                    </template>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="d in dates"
+                                    :key="d"
+                                    :class="{
+                                        'row-today': isToday(d),
+                                        'row-weekend': isWeekend(d),
+                                    }"
+                                >
+                                    <td class="date-col">
                                         <span class="date-text">{{ d }}</span>
                                         <v-chip
                                             v-if="isToday(d)"
@@ -594,87 +707,13 @@ onMounted(() => {
                                         >
                                             今天
                                         </v-chip>
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="p in visibleProjects" :key="p.id">
-                                    <td class="proj-col">
-                                        <div
-                                            class="proj-head"
-                                            :style="{
-                                                paddingLeft: p.level * 14 + 'px',
-                                            }"
-                                        >
-                                            <v-btn
-                                                v-if="hasChildren(p.id)"
-                                                icon
-                                                size="x-small"
-                                                variant="plain"
-                                                class="caret"
-                                                @click.stop="toggleExpand(p.id)"
-                                            >
-                                                <v-icon>
-                                                    {{
-                                                        expanded.has(p.id)
-                                                            ? "mdi-chevron-down"
-                                                            : "mdi-chevron-right"
-                                                    }}
-                                                </v-icon>
-                                            </v-btn>
-                                            <span
-                                                class="proj-name"
-                                                :title="p.name"
-                                                @click="openRename(p)"
-                                            >
-                                                {{ p.name }}
-                                            </span>
-                                            <v-menu location="bottom">
-                                                <template #activator="{ props }">
-                                                    <v-btn
-                                                        v-bind="props"
-                                                        icon
-                                                        size="x-small"
-                                                        variant="plain"
-                                                        class="proj-more"
-                                                    >
-                                                        <v-icon>
-                                                            mdi-dots-horizontal
-                                                        </v-icon>
-                                                    </v-btn>
-                                                </template>
-                                                <v-list density="compact">
-                                                    <v-list-item
-                                                        prepend-icon="mdi-folder-plus"
-                                                        @click="openNewChild(p)"
-                                                    >
-                                                        新建子项目
-                                                    </v-list-item>
-                                                    <v-list-item
-                                                        prepend-icon="mdi-pencil"
-                                                        @click="openRename(p)"
-                                                    >
-                                                        重命名
-                                                    </v-list-item>
-                                                    <v-list-item
-                                                        prepend-icon="mdi-delete"
-                                                        class="danger-item"
-                                                        @click="askDeleteProject(p)"
-                                                    >
-                                                        删除
-                                                    </v-list-item>
-                                                </v-list>
-                                            </v-menu>
-                                        </div>
                                     </td>
                                     <td
-                                        v-for="d in dates"
-                                        :key="d"
+                                        v-for="p in visibleProjects"
+                                        :key="p.id"
                                         class="cell"
                                         :class="{
                                             'cell-empty': !primaryLog(p.id, d),
-                                            'col-today': isToday(d),
-                                            'col-weekend': isWeekend(d),
                                         }"
                                     >
                                         <template v-if="primaryLog(p.id, d)">
@@ -1022,7 +1061,7 @@ table {
     border-collapse: separate;
     border-spacing: 0;
     width: 100%;
-    min-width: 1800px;
+    min-width: 960px;
     font-size: 13px;
 }
 thead th {
@@ -1045,37 +1084,41 @@ tbody td {
 tbody tr:hover td {
     background: #f8fafc;
 }
-/* 项目列：冻结在左侧，层级缩进 */
-.proj-col {
+/* 今天/周末行高亮 */
+tbody tr.row-today td {
+    background: #eff6ff;
+}
+tbody tr.row-today:hover td {
+    background: #e8f0fe;
+}
+tbody tr.row-weekend td {
+    background: #faf9f7;
+}
+
+/* 日期列：冻结在左侧 */
+.date-col {
     position: sticky;
     left: 0;
     z-index: 6;
     background: #f8fafc;
-    min-width: 180px;
     font-weight: 600;
-    color: #334155;
+    color: #475569;
     white-space: nowrap;
-    border-right: 1px solid #e2e8f0;
 }
-thead .proj-col {
+thead th.date-col {
     z-index: 7;
 }
-tbody .proj-col {
-    font-weight: 600;
+tbody .date-col {
+    background: #f8fafc;
 }
-
-/* 今天/周末：按日期列整列高亮 */
-thead th.col-today {
-    background: #e8f0fe;
-}
-thead th.col-weekend {
-    background: #f5f3ef;
-}
-tbody td.col-today {
+tbody tr.row-today .date-col {
     background: #eff6ff;
 }
-tbody td.col-weekend {
-    background: #faf9f7;
+tbody tr.row-weekend .date-col {
+    background: #f5f3ef;
+}
+td.date-col {
+    border-right: 1px solid #e2e8f0;
 }
 .date-text {
     margin-right: 6px;
@@ -1120,7 +1163,8 @@ tbody td.col-weekend {
 
 /* ---------- 单元格 ---------- */
 .cell {
-    min-width: 120px;
+    min-width: 132px;
+    max-width: 220px;
 }
 .cell-empty {
     color: #cbd5e1;
