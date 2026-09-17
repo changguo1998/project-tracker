@@ -181,6 +181,64 @@ async function run() {
         }
     }
 
+    // ---- 额外场景：子项目 / 改名 / 同日多日志 ----
+    const parent = createdProjects[0];
+    const childRes = await api("/api/projects", {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({ parentID: parent.id, name: "子项目·测试" }),
+    });
+    const child = childRes.project;
+    createdProjects.push(child);
+    assert(child.level === 1, `子项目 level 应为 1, 实际 ${child.level}`);
+    assert(child.parentID === parent.id, "子项目 parentID 应指向父级");
+
+    const renamed = `${parent.name}·改名`;
+    const up = await api(`/api/projects/${parent.id}`, {
+        method: "PATCH",
+        headers: json,
+        body: JSON.stringify({ name: renamed }),
+    });
+    assert(up.project.name === renamed, "PATCH 改名未生效");
+    parent.name = renamed;
+
+    const dayP = createdProjects[1];
+    const d0 = dates[0]; // 今天
+    const mkLog = (status, summary) =>
+        api("/api/logs", {
+            method: "POST",
+            headers: json,
+            body: JSON.stringify({
+                projectID: dayP.id,
+                date: d0,
+                status,
+                summary,
+                detail: "同日多日志测试",
+            }),
+        });
+    const l1 = (await mkLog("progress", "联调进行中")).log;
+    const l2 = (await mkLog("done", "已完成联调")).log;
+    createdLogs.push(l1, l2);
+    assert(l1.id !== l2.id, "同日两条日志 id 应不同");
+
+    const patched = (
+        await api(`/api/logs/${l1.id}`, {
+            method: "PATCH",
+            headers: json,
+            body: JSON.stringify({ status: "delay", summary: "联调超时" }),
+        })
+    ).log;
+    assert(
+        patched.status === "delay" && patched.summary === "联调超时",
+        "PATCH 日志未生效",
+    );
+    Object.assign(l1, patched);
+
+    const delL = await api(`/api/logs/${l2.id}`, { method: "DELETE", headers });
+    assert(delL.deleted === 1, "删除同日第二条日志失败");
+    const l2idx = createdLogs.findIndex((x) => x.id === l2.id);
+    if (l2idx >= 0) createdLogs.splice(l2idx, 1);
+
     // 读回逐条校验
     const after = await api("/api/state");
     const ps = new Map(after.projects.map((x) => [x.id, x]));
@@ -214,8 +272,8 @@ async function run() {
         return;
     }
 
-    // default：删除自己写入的项目（级联清其日志）
-    for (const p of createdProjects) {
+    // default：删除自己写入的项目（级联清其日志）——逆序先删子项目，避免父级级联后 404
+    for (const p of createdProjects.slice().reverse()) {
         const r = await api(`/api/projects/${p.id}`, {
             method: "DELETE",
             headers,

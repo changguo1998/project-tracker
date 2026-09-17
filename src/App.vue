@@ -5,8 +5,11 @@ import type { ApiProject, ApiLog } from "@/types/main";
 import {
     getState,
     addProject,
-    addLog,
+    patchProject,
     deleteProject,
+    addLog,
+    patchLog,
+    deleteLog,
 } from "@/api";
 
 /* ---------- 随机数据池（仅用于生成示例内容，写入走后端） ---------- */
@@ -56,6 +59,7 @@ const STATUS_NAME: Record<TaskStatus, string> = {
     done: "完成",
     delay: "延迟",
 };
+const STATUS_ITEMS = STATUS.map((s) => ({ title: STATUS_NAME[s], value: s }));
 
 const DAYS = 14;
 
@@ -64,6 +68,8 @@ const projects = ref<ApiProject[]>([]);
 const logs = ref<ApiLog[]>([]);
 const busy = ref(false);
 const error = ref("");
+/** 已展开（显示其子级列）的项目 id 集合 */
+const expanded = ref<Set<string>>(new Set());
 
 const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 const dateStr = (d: Date): string => d.toISOString().slice(0, 10);
@@ -86,17 +92,60 @@ const isWeekend = (d: string): boolean => {
     const day = new Date(`${d}T00:00:00`).getDay();
     return day === 0 || day === 6;
 };
-const logOf = (pid: string, d: string): ApiLog | undefined =>
-    logs.value.find((l) => l.projectID === pid && l.date === d);
+
+/* ---------- 子树 ---------- */
+const childrenOf = (id: string): ApiProject[] =>
+    projects.value.filter((p) => p.parentID === id);
+const hasChildren = (id: string): boolean => childrenOf(id).length > 0;
+const roots = computed(() => projects.value.filter((p) => !p.parentID));
+
+/** 可见列：按树 DFS 展开排序（收起的父级不进入其子级列） */
+const visibleProjects = computed<ApiProject[]>(() => {
+    const acc: ApiProject[] = [];
+    const walk = (list: ApiProject[]): void => {
+        for (const p of list) {
+            acc.push(p);
+            if (expanded.value.has(p.id)) walk(childrenOf(p.id));
+        }
+    };
+    walk(roots.value);
+    return acc;
+});
+
+function toggleExpand(id: string): void {
+    const s = new Set(expanded.value);
+    if (s.has(id)) s.delete(id);
+    else s.add(id);
+    expanded.value = s;
+}
+
+/* ---------- 日志查询 ---------- */
+/** 该日日志（同日内按入库序，后插在前作为"最新"展示） */
+const logsFor = (pid: string, d: string): ApiLog[] =>
+    logs.value
+        .filter((l) => l.projectID === pid && l.date === d)
+        .slice()
+        .reverse();
+const cellLogs = (pid: string, d: string): ApiLog[] => logsFor(pid, d);
+const primaryLog = (pid: string, d: string): ApiLog | undefined =>
+    cellLogs(pid, d)[0];
 const logCount = computed(() => logs.value.length);
 const totalDays = computed(() => dates.value.length);
 const hasData = computed(() => projects.value.length > 0);
 
 /* ---------- 与后端交互 ---------- */
+let firstLoad = true;
 async function load(): Promise<void> {
     const st = await getState();
     projects.value = st.projects;
     logs.value = st.logs;
+    if (firstLoad) {
+        firstLoad = false;
+        // 默认展开所有含子级的项目
+        const s = new Set<string>();
+        for (const p of projects.value) if (hasChildren(p.id)) s.add(p.id);
+        expanded.value = s;
+    }
 }
 
 /** 随机生成：把示例数据真实写入后端，再从 state 读回渲染 */
@@ -128,7 +177,7 @@ async function randomize(): Promise<void> {
         await load(); // 以服务端为准回读
     } catch (e) {
         error.value = e instanceof Error ? e.message : String(e);
-        await load(); // 失败也回读，保持与库一致
+        await load();
     } finally {
         busy.value = false;
     }
@@ -142,6 +191,7 @@ async function clear(): Promise<void> {
         for (const id of projects.value.map((p) => p.id)) {
             await deleteProject(id);
         }
+        expanded.value = new Set();
         await load();
     } catch (e) {
         error.value = e instanceof Error ? e.message : String(e);
@@ -149,6 +199,217 @@ async function clear(): Promise<void> {
     } finally {
         busy.value = false;
     }
+}
+
+/* ---------- 弹窗与操作 ---------- */
+interface ProjectDlg {
+    open: boolean;
+    mode: "new" | "rename";
+    id: string | null;
+    name: string;
+    parentID: string | null;
+}
+const projectDlg = ref<ProjectDlg>({
+    open: false,
+    mode: "new",
+    id: null,
+    name: "",
+    parentID: null,
+});
+const projectCandidates = computed(() =>
+    projects.value.filter((p) => p.id !== projectDlg.value.id),
+);
+
+function openNewProject(parentID: string | null = null): void {
+    projectDlg.value = {
+        open: true,
+        mode: "new",
+        id: null,
+        name: "",
+        parentID,
+    };
+}
+function openRename(p: ApiProject): void {
+    projectDlg.value = {
+        open: true,
+        mode: "rename",
+        id: p.id,
+        name: p.name,
+        parentID: null,
+    };
+}
+function openNewChild(p: ApiProject): void {
+    openNewProject(p.id);
+}
+async function saveProject(): Promise<void> {
+    const d = projectDlg.value;
+    const name = d.name.trim();
+    if (!name) return;
+    busy.value = true;
+    error.value = "";
+    try {
+        if (d.mode === "new") {
+            await addProject({ parentID: d.parentID, name });
+        } else if (d.id) {
+            await patchProject(d.id, { name });
+        }
+        d.open = false;
+        await load();
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : String(e);
+    } finally {
+        busy.value = false;
+    }
+}
+async function deleteProjectNow(id: string): Promise<void> {
+    busy.value = true;
+    error.value = "";
+    try {
+        await deleteProject(id);
+        expanded.value = new Set();
+        await load();
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : String(e);
+        await load();
+    } finally {
+        busy.value = false;
+    }
+}
+
+interface LogDlg {
+    open: boolean;
+    project: ApiProject | null;
+    date: string;
+    log: ApiLog | null;
+    status: TaskStatus;
+    summary: string;
+    detail: string;
+}
+const logDlg = ref<LogDlg>({
+    open: false,
+    project: null,
+    date: "",
+    log: null,
+    status: "plan",
+    summary: "",
+    detail: "",
+});
+function openLogNew(p: ApiProject, d: string): void {
+    multiDlg.value.open = false;
+    logDlg.value = {
+        open: true,
+        project: p,
+        date: d,
+        log: null,
+        status: "plan",
+        summary: "",
+        detail: "",
+    };
+}
+function openLogEdit(l: ApiLog): void {
+    multiDlg.value.open = false;
+    const p = projects.value.find((x) => x.id === l.projectID) ?? null;
+    logDlg.value = {
+        open: true,
+        project: p,
+        date: l.date,
+        log: l,
+        status: l.status,
+        summary: l.summary,
+        detail: l.detail,
+    };
+}
+async function saveLog(): Promise<void> {
+    const d = logDlg.value;
+    if (!d.project) return;
+    busy.value = true;
+    error.value = "";
+    try {
+        if (d.log) {
+            await patchLog(d.log.id, {
+                status: d.status,
+                summary: d.summary,
+                detail: d.detail,
+            });
+        } else {
+            await addLog({
+                projectID: d.project.id,
+                date: d.date,
+                status: d.status,
+                summary: d.summary,
+                detail: d.detail,
+            });
+        }
+        d.open = false;
+        await load();
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : String(e);
+    } finally {
+        busy.value = false;
+    }
+}
+async function deleteLogNow(l: ApiLog): Promise<void> {
+    busy.value = true;
+    error.value = "";
+    try {
+        await deleteLog(l.id);
+        logDlg.value.open = false;
+        multiDlg.value.open = false;
+        await load();
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : String(e);
+        await load();
+    } finally {
+        busy.value = false;
+    }
+}
+
+/* 同日多日志列表 */
+const multiDlg = ref<{ open: boolean; project: ApiProject | null; date: string }>({
+    open: false,
+    project: null,
+    date: "",
+});
+const multiLogs = computed<ApiLog[]>(() => {
+    const m = multiDlg.value;
+    return m.project ? cellLogs(m.project.id, m.date) : [];
+});
+function openMulti(p: ApiProject, d: string): void {
+    multiDlg.value = { open: true, project: p, date: d };
+}
+
+/** 点击单元格：多条开列表，单条直接编辑 */
+function openCell(p: ApiProject, d: string): void {
+    const ls = cellLogs(p.id, d);
+    if (ls.length > 1) openMulti(p, d);
+    else if (ls.length === 1) openLogEdit(ls[0]);
+}
+
+/* 通用确认框 */
+const confirmDlg = ref<{ open: boolean; text: string; onYes: (() => void) | null }>({
+    open: false,
+    text: "",
+    onYes: null,
+});
+function askDeleteProject(p: ApiProject): void {
+    confirmDlg.value = {
+        open: true,
+        text: `删除「${p.name}」及其全部子项目与日志？此操作不可恢复。`,
+        onYes: () => void deleteProjectNow(p.id),
+    };
+}
+function askDeleteLog(l: ApiLog): void {
+    confirmDlg.value = {
+        open: true,
+        text: `删除日志「${l.summary}」（${l.date}）？`,
+        onYes: () => void deleteLogNow(l),
+    };
+}
+function confirmYes(): void {
+    const fn = confirmDlg.value.onYes;
+    confirmDlg.value.open = false;
+    logDlg.value.open = false;
+    if (fn) fn();
 }
 
 onMounted(() => {
@@ -186,6 +447,14 @@ onMounted(() => {
                         @click="clear"
                     >
                         清空
+                    </v-btn>
+                    <v-btn
+                        variant="outlined"
+                        :disabled="busy"
+                        prepend-icon="mdi-plus"
+                        @click="openNewProject(null)"
+                    >
+                        新建项目
                     </v-btn>
                     <v-btn
                         color="primary"
@@ -228,7 +497,7 @@ onMounted(() => {
                     </v-icon>
                     <div class="empty-title">还没有数据</div>
                     <div class="empty-sub">
-                        点击右上角「随机生成数据」写入示例时间表（数据保存在后端）
+                        点击右上角「新建项目」或「随机生成数据」开始
                     </div>
                 </v-card>
 
@@ -239,8 +508,73 @@ onMounted(() => {
                             <thead>
                                 <tr>
                                     <th class="date-col">日期</th>
-                                    <th v-for="p in projects" :key="p.id">
-                                        {{ p.name }}
+                                    <th v-for="p in visibleProjects" :key="p.id">
+                                        <div
+                                            class="proj-head"
+                                            :style="{
+                                                paddingLeft: p.level * 14 + 'px',
+                                            }"
+                                        >
+                                            <v-btn
+                                                v-if="hasChildren(p.id)"
+                                                icon
+                                                size="x-small"
+                                                variant="plain"
+                                                class="caret"
+                                                @click.stop="toggleExpand(p.id)"
+                                            >
+                                                <v-icon>
+                                                    {{
+                                                        expanded.has(p.id)
+                                                            ? "mdi-chevron-down"
+                                                            : "mdi-chevron-right"
+                                                    }}
+                                                </v-icon>
+                                            </v-btn>
+                                            <span
+                                                class="proj-name"
+                                                :title="p.name"
+                                                @click="openRename(p)"
+                                            >
+                                                {{ p.name }}
+                                            </span>
+                                            <v-menu location="bottom">
+                                                <template #activator="{ props }">
+                                                    <v-btn
+                                                        v-bind="props"
+                                                        icon
+                                                        size="x-small"
+                                                        variant="plain"
+                                                        class="proj-more"
+                                                    >
+                                                        <v-icon>
+                                                            mdi-dots-horizontal
+                                                        </v-icon>
+                                                    </v-btn>
+                                                </template>
+                                                <v-list density="compact">
+                                                    <v-list-item
+                                                        prepend-icon="mdi-folder-plus"
+                                                        @click="openNewChild(p)"
+                                                    >
+                                                        新建子项目
+                                                    </v-list-item>
+                                                    <v-list-item
+                                                        prepend-icon="mdi-pencil"
+                                                        @click="openRename(p)"
+                                                    >
+                                                        重命名
+                                                    </v-list-item>
+                                                    <v-list-item
+                                                        prepend-icon="mdi-delete"
+                                                        class="danger-item"
+                                                        @click="askDeleteProject(p)"
+                                                    >
+                                                        删除
+                                                    </v-list-item>
+                                                </v-list>
+                                            </v-menu>
+                                        </div>
                                     </th>
                                 </tr>
                             </thead>
@@ -265,38 +599,62 @@ onMounted(() => {
                                         </v-chip>
                                     </td>
                                     <td
-                                        v-for="p in projects"
+                                        v-for="p in visibleProjects"
                                         :key="p.id"
                                         class="cell"
                                         :class="{
-                                            'cell-empty': !logOf(p.id, d),
+                                            'cell-empty': !primaryLog(p.id, d),
                                         }"
                                     >
-                                        <template
-                                            v-if="logOf(p.id, d)"
-                                        >
+                                        <template v-if="primaryLog(p.id, d)">
                                             <div
-                                                class="log"
-                                                :title="`${STATUS_NAME[logOf(p.id, d)!.status]} · ${logOf(p.id, d)!.detail}`"
+                                                class="log clickable"
+                                                @click="openCell(p, d)"
                                             >
                                                 <v-chip
                                                     size="x-small"
-                                                    :class="['badge', `st-${logOf(p.id, d)!.status}`]"
+                                                    :class="[
+                                                        'badge',
+                                                        `st-${primaryLog(p.id, d)!.status}`,
+                                                    ]"
                                                 >
                                                     {{
                                                         STATUS_NAME[
-                                                            logOf(p.id, d)!.status
+                                                            primaryLog(p.id, d)!
+                                                                .status
                                                         ]
                                                     }}
                                                 </v-chip>
                                                 <span class="summary">
                                                     {{
-                                                        logOf(p.id, d)!.summary
+                                                        primaryLog(p.id, d)!
+                                                            .summary
                                                     }}
                                                 </span>
+                                                <v-chip
+                                                    v-if="
+                                                        cellLogs(p.id, d).length >
+                                                        1
+                                                    "
+                                                    size="x-small"
+                                                    variant="tonal"
+                                                    color="secondary"
+                                                    class="multi-tag"
+                                                >
+                                                    +{{
+                                                        cellLogs(p.id, d).length -
+                                                        1
+                                                    }}
+                                                </v-chip>
                                             </div>
                                         </template>
-                                        <span v-else class="plus">＋</span>
+                                        <span
+                                            v-else
+                                            class="plus clickable"
+                                            @click="openLogNew(p, d)"
+                                        >
+                                            ＋
+                                        </span>
                                     </td>
                                 </tr>
                             </tbody>
@@ -305,6 +663,183 @@ onMounted(() => {
                 </v-card>
             </v-container>
         </v-main>
+
+        <!-- 项目：新建 / 重命名 -->
+        <v-dialog v-model="projectDlg.open" max-width="420" persistent>
+            <v-card>
+                <v-card-title>
+                    {{ projectDlg.mode === "new" ? "新建项目" : "重命名项目" }}
+                </v-card-title>
+                <v-card-text>
+                    <v-text-field
+                        v-model="projectDlg.name"
+                        label="项目名称"
+                        density="compact"
+                    />
+                    <v-select
+                        v-if="projectDlg.mode === 'new'"
+                        v-model="projectDlg.parentID"
+                        :items="projectCandidates"
+                        item-title="name"
+                        item-value="id"
+                        label="父项目（可选，留空为根级）"
+                        density="compact"
+                        clearable
+                    />
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" @click="projectDlg.open = false">
+                        取消
+                    </v-btn>
+                    <v-btn
+                        color="primary"
+                        :disabled="busy || !projectDlg.name.trim()"
+                        @click="saveProject"
+                    >
+                        保存
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
+        <!-- 日志：新增 / 编辑 -->
+        <v-dialog v-model="logDlg.open" max-width="460" persistent>
+            <v-card v-if="logDlg.project">
+                <v-card-title>
+                    {{
+                        logDlg.log ? "编辑日志" : "新增日志"
+                    }}
+                    · {{ logDlg.project.name }} · {{ logDlg.date }}
+                </v-card-title>
+                <v-card-text>
+                    <v-select
+                        v-model="logDlg.status"
+                        :items="STATUS_ITEMS"
+                        label="状态"
+                        density="compact"
+                    />
+                    <v-text-field
+                        v-model="logDlg.summary"
+                        label="摘要"
+                        density="compact"
+                    />
+                    <v-textarea
+                        v-model="logDlg.detail"
+                        label="详情"
+                        density="compact"
+                        rows="2"
+                    />
+                </v-card-text>
+                <v-card-actions>
+                    <v-btn
+                        v-if="logDlg.log"
+                        color="error"
+                        variant="text"
+                        @click="askDeleteLog(logDlg.log)"
+                    >
+                        删除
+                    </v-btn>
+                    <v-spacer />
+                    <v-btn variant="text" @click="logDlg.open = false">
+                        取消
+                    </v-btn>
+                    <v-btn
+                        color="primary"
+                        :disabled="busy"
+                        @click="saveLog"
+                    >
+                        保存
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
+        <!-- 同日多日志列表 -->
+        <v-dialog v-model="multiDlg.open" max-width="500">
+            <v-card v-if="multiDlg.project">
+                <v-card-title class="multi-title">
+                    {{ multiDlg.project.name }} · {{ multiDlg.date }}（{{
+                        multiLogs.length
+                    }}
+                    条）
+                </v-card-title>
+                <v-card-text>
+                    <v-list density="compact" class="multi-list">
+                        <v-list-item
+                            v-for="l in multiLogs"
+                            :key="l.id"
+                            class="multi-item"
+                        >
+                            <template #prepend>
+                                <v-chip
+                                    size="x-small"
+                                    :class="['badge', `st-${l.status}`]"
+                                >
+                                    {{ STATUS_NAME[l.status] }}
+                                </v-chip>
+                            </template>
+                            <v-list-item-title>{{ l.summary }}</v-list-item-title>
+                            <v-list-item-subtitle>
+                                {{ l.detail }}
+                            </v-list-item-subtitle>
+                            <template #append>
+                                <v-btn
+                                    icon
+                                    size="x-small"
+                                    variant="text"
+                                    @click="openLogEdit(l)"
+                                >
+                                    <v-icon>mdi-pencil</v-icon>
+                                </v-btn>
+                                <v-btn
+                                    icon
+                                    size="x-small"
+                                    variant="text"
+                                    @click="askDeleteLog(l)"
+                                >
+                                    <v-icon>mdi-delete</v-icon>
+                                </v-btn>
+                            </template>
+                        </v-list-item>
+                    </v-list>
+                </v-card-text>
+                <v-card-actions>
+                    <v-btn
+                        variant="tonal"
+                        @click="openLogNew(multiDlg.project, multiDlg.date)"
+                    >
+                        新增一条
+                    </v-btn>
+                    <v-spacer />
+                    <v-btn variant="text" @click="multiDlg.open = false">
+                        关闭
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
+        <!-- 删除确认 -->
+        <v-dialog v-model="confirmDlg.open" max-width="380" persistent>
+            <v-card>
+                <v-card-text class="confirm-text">
+                    {{ confirmDlg.text }}
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" @click="confirmDlg.open = false">
+                        取消
+                    </v-btn>
+                    <v-btn
+                        color="error"
+                        variant="tonal"
+                        @click="confirmYes"
+                    >
+                        删除
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
     </v-app>
 </template>
 
@@ -388,7 +923,7 @@ thead th {
     color: #475569;
     font-weight: 600;
     text-align: left;
-    padding: 10px 14px;
+    padding: 6px 10px;
     border-bottom: 1px solid #e2e8f0;
     white-space: nowrap;
 }
@@ -439,6 +974,39 @@ td.date-col {
     font-style: normal;
 }
 
+/* ---------- 表头（层级缩进 + 折叠 / 菜单） ---------- */
+.proj-head {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 120px;
+}
+.caret {
+    flex: 0 0 auto;
+    margin: 0 -6px;
+}
+.proj-name {
+    cursor: pointer;
+    color: #334155;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+}
+.proj-name:hover {
+    color: #1d4ed8;
+}
+.proj-more {
+    flex: 0 0 auto;
+    margin: 0 -6px;
+    opacity: 0.4;
+}
+.proj-head:hover .proj-more {
+    opacity: 1;
+}
+.danger-item {
+    color: #dc2626;
+}
+
 /* ---------- 单元格 ---------- */
 .cell {
     min-width: 132px;
@@ -446,6 +1014,9 @@ td.date-col {
 .cell-empty {
     color: #cbd5e1;
     text-align: center;
+}
+.clickable {
+    cursor: pointer;
 }
 .plus {
     opacity: 0;
@@ -469,6 +1040,9 @@ tr:hover .plus {
     text-overflow: ellipsis;
     max-width: 200px;
 }
+.multi-tag {
+    flex: 0 0 auto;
+}
 
 /* 状态徽章配色（覆盖 v-chip 默认色） */
 .badge.st-plan {
@@ -490,5 +1064,21 @@ tr:hover .plus {
 .badge.st-delay {
     background: #fef3c7;
     color: #b45309;
+}
+
+/* ---------- 弹窗 ---------- */
+.multi-title {
+    font-size: 15px;
+}
+.multi-list {
+    max-height: 320px;
+    overflow-y: auto;
+}
+.multi-item :deep(.v-list-item__prepend) {
+    margin-right: 12px;
+}
+.confirm-text {
+    font-size: 14px;
+    color: #334155;
 }
 </style>
