@@ -291,7 +291,13 @@ async function randomize(): Promise<void> {
             .slice(0, n);
         const created: ApiProject[] = [];
         for (const name of names) {
-            created.push(await addProject({ parentID: null, name }));
+            created.push(
+                await addProject({
+                    parentID: null,
+                    name,
+                    status: pick(STATUS),
+                }),
+            );
         }
         // 约半数顶层项目随机挂 1~2 个子项目，验证子树层级/折叠
         const childPool = CHILD_POOL.slice().sort(() => Math.random() - 0.5);
@@ -314,7 +320,6 @@ async function randomize(): Promise<void> {
                     await addLog({
                         projectID: p.id,
                         date: d,
-                        status: pick(STATUS),
                         summary: pick(SUMMARY_POOL),
                         detail: pick(DETAIL_POOL),
                     });
@@ -355,6 +360,7 @@ interface ProjectDlg {
     id: string | null;
     name: string;
     parentID: string | null;
+    status: TaskStatus;
 }
 const projectDlg = ref<ProjectDlg>({
     open: false,
@@ -362,6 +368,7 @@ const projectDlg = ref<ProjectDlg>({
     id: null,
     name: "",
     parentID: null,
+    status: "plan",
 });
 const projectCandidates = computed(() =>
     projects.value.filter((p) => p.id !== projectDlg.value.id),
@@ -374,6 +381,7 @@ function openNewProject(parentID: string | null = null): void {
         id: null,
         name: "",
         parentID,
+        status: "plan",
     };
 }
 function openRename(p: ApiProject): void {
@@ -383,6 +391,7 @@ function openRename(p: ApiProject): void {
         id: p.id,
         name: p.name,
         parentID: null,
+        status: p.status,
     };
 }
 function openNewChild(p: ApiProject): void {
@@ -396,9 +405,9 @@ async function saveProject(): Promise<void> {
     error.value = "";
     try {
         if (d.mode === "new") {
-            await addProject({ parentID: d.parentID, name });
+            await addProject({ parentID: d.parentID, name, status: d.status });
         } else if (d.id) {
-            await patchProject(d.id, { name });
+            await patchProject(d.id, { name, status: d.status });
         }
         d.open = false;
         await load();
@@ -428,7 +437,6 @@ interface LogDlg {
     project: ApiProject | null;
     date: string;
     log: ApiLog | null;
-    status: TaskStatus;
     summary: string;
     detail: string;
     category: string;
@@ -439,7 +447,6 @@ const logDlg = ref<LogDlg>({
     project: null,
     date: "",
     log: null,
-    status: "plan",
     summary: "",
     detail: "",
     category: "",
@@ -452,7 +459,6 @@ function openLogNew(p: ApiProject, d: string): void {
         project: p,
         date: d,
         log: null,
-        status: "plan",
         summary: "",
         detail: "",
         category: "",
@@ -467,7 +473,6 @@ function openLogEdit(l: ApiLog): void {
         project: p,
         date: l.date,
         log: l,
-        status: l.status,
         summary: l.summary,
         detail: l.detail,
         category: l.category ?? "",
@@ -482,7 +487,6 @@ async function saveLog(): Promise<void> {
     try {
         if (d.log) {
             await patchLog(d.log.id, {
-                status: d.status,
                 summary: d.summary,
                 detail: d.detail,
                 category: String(d.category ?? "").trim() || null,
@@ -492,7 +496,6 @@ async function saveLog(): Promise<void> {
             await addLog({
                 projectID: d.project.id,
                 date: d.date,
-                status: d.status,
                 summary: d.summary,
                 detail: d.detail,
                 category: String(d.category ?? "").trim() || null,
@@ -785,6 +788,15 @@ onMounted(() => {
                                                 >
                                                     {{ r.name }}
                                                 </span>
+                                                <v-chip
+                                                    size="x-small"
+                                                    :class="[
+                                                        'badge',
+                                                        `st-${r.status}`,
+                                                    ]"
+                                                >
+                                                    {{ STATUS_NAME[r.status] }}
+                                                </v-chip>
                                                 <v-menu location="bottom">
                                                     <template
                                                         #activator="{ props }"
@@ -883,6 +895,15 @@ onMounted(() => {
                                             >
                                                 {{ p.name }}
                                             </span>
+                                            <v-chip
+                                                size="x-small"
+                                                :class="[
+                                                    'badge',
+                                                    `st-${p.status}`,
+                                                ]"
+                                            >
+                                                {{ STATUS_NAME[p.status] }}
+                                            </v-chip>
                                             <v-menu location="bottom">
                                                 <template
                                                     #activator="{ props }"
@@ -962,22 +983,8 @@ onMounted(() => {
                                             <div
                                                 class="log clickable"
                                                 @click="openCell(p, d)"
-                                                :title="`${STATUS_NAME[primaryLog(p.id, d)!.status]} · ${primaryLog(p.id, d)!.summary}${metaText(primaryLog(p.id, d)!) ? '\n' + metaText(primaryLog(p.id, d)!) : ''}`"
+                                                :title="`${primaryLog(p.id, d)!.summary}${metaText(primaryLog(p.id, d)!) ? '\n' + metaText(primaryLog(p.id, d)!) : ''}`"
                                             >
-                                                <v-chip
-                                                    size="x-small"
-                                                    :class="[
-                                                        'badge',
-                                                        `st-${primaryLog(p.id, d)!.status}`,
-                                                    ]"
-                                                >
-                                                    {{
-                                                        STATUS_NAME[
-                                                            primaryLog(p.id, d)!
-                                                                .status
-                                                        ]
-                                                    }}
-                                                </v-chip>
                                                 <span class="summary">
                                                     {{
                                                         primaryLog(p.id, d)!
@@ -1031,6 +1038,12 @@ onMounted(() => {
                         density="compact"
                     />
                     <v-select
+                        v-model="projectDlg.status"
+                        :items="STATUS_ITEMS"
+                        label="状态"
+                        density="compact"
+                    />
+                    <v-select
                         v-if="projectDlg.mode === 'new'"
                         v-model="projectDlg.parentID"
                         :items="projectCandidates"
@@ -1067,13 +1080,6 @@ onMounted(() => {
                     · {{ logDlg.project.name }} · {{ logDlg.date }}
                 </v-card-title>
                 <v-card-text>
-                    <v-select
-                        v-model="logDlg.status"
-                        :items="STATUS_ITEMS"
-                        label="状态"
-                        density="compact"
-                    />
-
                     <v-combobox
                         v-model="logDlg.category"
                         :items="CATEGORY_POOL"
@@ -1142,14 +1148,6 @@ onMounted(() => {
                             :key="l.id"
                             class="multi-item"
                         >
-                            <template #prepend>
-                                <v-chip
-                                    size="x-small"
-                                    :class="['badge', `st-${l.status}`]"
-                                >
-                                    {{ STATUS_NAME[l.status] }}
-                                </v-chip>
-                            </template>
                             <v-list-item-title>{{ l.summary }}</v-list-item-title>
                             <v-list-item-subtitle>
                                 {{ l.detail }}

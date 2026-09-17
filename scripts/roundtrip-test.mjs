@@ -124,7 +124,11 @@ async function run() {
             st.projects.length >= 1,
             `--clean 期望读到保留数据（≥1 项目），实际 ${st.projects.length}`,
         );
-        for (const p of st.projects) {
+        // 按 level 降序删：先删最深层子级，再删父级，避免父级级联后子级 404
+        const ordered = st.projects
+            .slice()
+            .sort((a, b) => b.level - a.level);
+        for (const p of ordered) {
             const r = await api(`/api/projects/${p.id}`, {
                 method: "DELETE",
                 headers,
@@ -156,7 +160,7 @@ async function run() {
         const r = await api("/api/projects", {
             method: "POST",
             headers: json,
-            body: JSON.stringify({ parentID: null, name }),
+            body: JSON.stringify({ parentID: null, name, status: pick(STATUS) }),
         });
         createdProjects.push(r.project);
     }
@@ -171,7 +175,6 @@ async function run() {
                     body: JSON.stringify({
                         projectID: p.id,
                         date: d,
-                        status: pick(STATUS),
                         summary: pick(SUMMARY_POOL),
                         detail: pick(DETAIL_POOL),
                     }),
@@ -186,40 +189,48 @@ async function run() {
     const childRes = await api("/api/projects", {
         method: "POST",
         headers: json,
-        body: JSON.stringify({ parentID: parent.id, name: "子项目·测试" }),
+        body: JSON.stringify({
+            parentID: parent.id,
+            name: "子项目·测试",
+            status: "progress",
+        }),
     });
     const child = childRes.project;
     createdProjects.push(child);
     assert(child.level === 1, `子项目 level 应为 1, 实际 ${child.level}`);
     assert(child.parentID === parent.id, "子项目 parentID 应指向父级");
+    assert(child.status === "progress", "子项目状态应保存为 progress");
 
     const renamed = `${parent.name}·改名`;
     const up = await api(`/api/projects/${parent.id}`, {
         method: "PATCH",
         headers: json,
-        body: JSON.stringify({ name: renamed }),
+        body: JSON.stringify({ name: renamed, status: "done" }),
     });
-    assert(up.project.name === renamed, "PATCH 改名未生效");
+    assert(
+        up.project.name === renamed && up.project.status === "done",
+        "PATCH 改名/改状态未生效",
+    );
     parent.name = renamed;
+    parent.status = "done";
 
     const dayP = createdProjects[1];
     const d0 = dates[0]; // 今天
-    const mkLog = (status, summary) =>
+    const mkLog = (summary) =>
         api("/api/logs", {
             method: "POST",
             headers: json,
             body: JSON.stringify({
                 projectID: dayP.id,
                 date: d0,
-                status,
                 summary,
                 detail: "同日多日志测试",
                 category: "开发",
                 tags: ["冒烟", "回归"],
             }),
         });
-    const l1 = (await mkLog("progress", "联调进行中")).log;
-    const l2 = (await mkLog("done", "已完成联调")).log;
+    const l1 = (await mkLog("联调进行中")).log;
+    const l2 = (await mkLog("已完成联调")).log;
     createdLogs.push(l1, l2);
     assert(l1.id !== l2.id, "同日两条日志 id 应不同");
 
@@ -228,14 +239,13 @@ async function run() {
             method: "PATCH",
             headers: json,
             body: JSON.stringify({
-                status: "delay",
                 summary: "联调超时",
                 tags: ["全量"],
             }),
         })
     ).log;
     assert(
-        patched.status === "delay" && patched.summary === "联调超时",
+        patched.summary === "联调超时" && patched.tags.join(",") === "全量",
         "PATCH 日志未生效",
     );
     Object.assign(l1, patched);
@@ -257,6 +267,7 @@ async function run() {
         const got = ps.get(p.id);
         assert(got, `写入项目「${p.name}」未在 state 中读回`);
         assert(got.name === p.name, `项目 ${p.id} 名称不一致`);
+        assert(got.status === p.status, `项目 ${p.id} 状态不一致`);
     }
     for (const l of createdLogs) {
         const got = ls.get(l.id);
@@ -264,7 +275,6 @@ async function run() {
         assert(
             got.projectID === l.projectID &&
                 got.date === l.date &&
-                got.status === l.status &&
                 got.summary === l.summary &&
                 got.detail === l.detail &&
                 got.category === (l.category ?? null) &&

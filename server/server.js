@@ -21,6 +21,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS projects(
   parentID TEXT,
   name TEXT,
   level INTEGER,
+  status TEXT,
   updatedAt TEXT
 )`);
 db.exec(`CREATE TABLE IF NOT EXISTS logs(
@@ -43,6 +44,16 @@ const logCols = db
 if (!logCols.includes("category"))
   db.exec("ALTER TABLE logs ADD COLUMN category TEXT");
 if (!logCols.includes("tags")) db.exec("ALTER TABLE logs ADD COLUMN tags TEXT");
+
+// 幂等迁移：老库 projects 无 status 列则补齐
+const projCols = db
+  .prepare("PRAGMA table_info(projects)")
+  .all()
+  .map((c) => c.name);
+if (!projCols.includes("status"))
+  db.exec("ALTER TABLE projects ADD COLUMN status TEXT");
+// 存量数据默认状态
+db.exec("UPDATE projects SET status = 'plan' WHERE status IS NULL");
 
 const VALID_STATUS = new Set(["plan", "progress", "failed", "done", "delay"]);
 const now = () => new Date().toISOString();
@@ -84,9 +95,9 @@ app.use("/api", (req, res, next) => {
 // ---------- 七条 API 路由 ----------
 
 // GET /api/state
-app.get("/api/state", (req, res) => {
+app.get("/api/state", (_req, res) => {
   const projects = db
-    .prepare("SELECT id, parentID, name, level FROM projects ORDER BY name")
+    .prepare("SELECT id, parentID, name, level, status FROM projects ORDER BY name")
     .all();
   const parseTags = (t) => {
     if (t == null) return [];
@@ -99,7 +110,7 @@ app.get("/api/state", (req, res) => {
   };
   const logs = db
     .prepare(
-      "SELECT id, projectID, date, status, summary, detail, category, tags FROM logs ORDER BY date",
+      "SELECT id, projectID, date, summary, detail, category, tags FROM logs ORDER BY date",
     )
     .all()
     .map((l) => ({ ...l, tags: parseTags(l.tags) }));
@@ -136,24 +147,42 @@ app.post("/api/projects", (req, res) => {
     b.parentID = null; // 缺失/空/显式 null 一律视为根级
   }
 
+  if (
+    b.status !== undefined &&
+    (typeof b.status !== "string" || !VALID_STATUS.has(b.status))
+  )
+    return res.status(400).json(bodyError("invalid status"));
+
   const id = crypto.randomUUID();
+  const status = b.status ?? "plan";
   db.prepare(
-    "INSERT INTO projects(id, parentID, name, level, updatedAt) VALUES (?,?,?,?,?)",
-  ).run(id, b.parentID, b.name, level, now());
-  const project = { id, parentID: b.parentID, name: b.name, level };
+    "INSERT INTO projects(id, parentID, name, level, status, updatedAt) VALUES (?,?,?,?,?,?)",
+  ).run(id, b.parentID, b.name, level, status, now());
+  const project = { id, parentID: b.parentID, name: b.name, level, status };
   res.status(201).json({ id, project });
 });
 
-// PATCH /api/projects/:id
+// PATCH /api/projects/:id（name / status 均可选，至少一项）
 app.patch("/api/projects/:id", (req, res) => {
   const b = req.body || {};
   if (typeof b !== "object" || Array.isArray(b))
     return res.status(400).json(bodyError("name: 必须是对象"));
   if (Object.keys(b).length === 0)
     return res.status(400).json(bodyError("无字段可更新"));
-  if (!("name" in b)) return res.status(400).json(bodyError("name: 必填"));
-  if (typeof b.name !== "string" || b.name.trim() === "") {
+
+  const fields = {};
+  if ("name" in b) fields.name = b.name;
+  if ("status" in b) fields.status = b.status;
+  if (Object.keys(fields).length === 0)
+    return res.status(400).json(bodyError("无字段可更新"));
+  if (
+    "name" in fields &&
+    (typeof fields.name !== "string" || fields.name.trim() === "")
+  ) {
     return res.status(400).json(bodyError("name: 必填字符串"));
+  }
+  if ("status" in fields && !VALID_STATUS.has(fields.status)) {
+    return res.status(400).json(bodyError("invalid status"));
   }
 
   const existing = db
@@ -161,13 +190,16 @@ app.patch("/api/projects/:id", (req, res) => {
     .get(req.params.id);
   if (!existing) return res.status(404).json(bodyError("not found"));
 
-  db.prepare("UPDATE projects SET name = ?, updatedAt = ? WHERE id = ?").run(
-    b.name,
-    now(),
-    req.params.id,
-  );
+  const assignments = Object.keys(fields)
+    .map((k) => `${k} = ?`)
+    .join(", ");
+  db.prepare(
+    `UPDATE projects SET ${assignments}, updatedAt = ? WHERE id = ?`,
+  ).run(...Object.values(fields), now(), req.params.id);
   const row = db
-    .prepare("SELECT id, parentID, name, level FROM projects WHERE id = ?")
+    .prepare(
+      "SELECT id, parentID, name, level, status FROM projects WHERE id = ?",
+    )
     .get(req.params.id);
   res.json({ project: row });
 });
@@ -216,9 +248,6 @@ app.post("/api/logs", (req, res) => {
   if (typeof b.date !== "string" || b.date === "") {
     return res.status(400).json(bodyError("date: 必填字符串"));
   }
-  if (typeof b.status !== "string" || !VALID_STATUS.has(b.status)) {
-    return res.status(400).json(bodyError("invalid status"));
-  }
   if (b.summary !== undefined && typeof b.summary !== "string")
     return res.status(400).json(bodyError("summary: 类型错误"));
   if (b.detail !== undefined && typeof b.detail !== "string")
@@ -240,12 +269,11 @@ app.post("/api/logs", (req, res) => {
   const category = b.category ?? null;
   const tags = JSON.stringify(b.tags ?? []);
   db.prepare(
-    "INSERT INTO logs(id, projectID, date, status, summary, detail, category, tags, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)",
+    "INSERT INTO logs(id, projectID, date, summary, detail, category, tags, updatedAt) VALUES (?,?,?,?,?,?,?,?)",
   ).run(
     id,
     b.projectID,
     b.date,
-    b.status,
     summary,
     detail,
     category,
@@ -256,7 +284,6 @@ app.post("/api/logs", (req, res) => {
     id,
     projectID: b.projectID,
     date: b.date,
-    status: b.status,
     summary,
     detail,
     category,
@@ -279,14 +306,7 @@ app.patch("/api/logs/:id", (req, res) => {
   if (!existing) return res.status(404).json(bodyError("not found"));
 
   const fields = {};
-  for (const key of [
-    "date",
-    "status",
-    "summary",
-    "detail",
-    "category",
-    "tags",
-  ]) {
+  for (const key of ["date", "summary", "detail", "category", "tags"]) {
     if (key in b) fields[key] = b[key];
   }
   if (
@@ -294,12 +314,6 @@ app.patch("/api/logs/:id", (req, res) => {
     (typeof fields.date !== "string" || fields.date === "")
   ) {
     return res.status(400).json(bodyError("date: 必填字符串"));
-  }
-  if (
-    "status" in fields &&
-    (typeof fields.status !== "string" || !VALID_STATUS.has(fields.status))
-  ) {
-    return res.status(400).json(bodyError("invalid status"));
   }
   if (
     "summary" in fields &&

@@ -6,6 +6,8 @@ export interface ProjectRec {
     parentID: string | null;
     name: string;
     level: number;
+    /** 项目/子项目状态 */
+    status: TaskStatus;
 }
 
 /** 前端模型：children 由 loadState 依据扁平 parentID 重建（叶子为 null） */
@@ -18,7 +20,6 @@ export interface LogRec {
     id: string;
     projectID: string;
     date: string;
-    status: TaskStatus;
     summary: string;
     detail: string;
     /** 分类：单选，可空 */

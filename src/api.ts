@@ -39,6 +39,7 @@ export function getState(): Promise<{
 export async function addProject(p: {
     parentID: string | null;
     name: string;
+    status?: TaskStatus;
 }): Promise<ApiProject> {
     const body = await request<{ id: string; project: ApiProject }>(
         "/api/projects",
@@ -53,7 +54,7 @@ export async function addProject(p: {
 
 export function patchProject(
     id: string,
-    p: { name: string },
+    p: { name?: string; status?: TaskStatus },
 ): Promise<ApiProject> {
     return request<{ project: ApiProject }>(`/api/projects/${id}`, {
         method: "PATCH",
@@ -68,7 +69,6 @@ export function deleteProject(id: string): Promise<{ deleted: number }> {
 export async function addLog(p: {
     projectID: string;
     date: string;
-    status: TaskStatus;
     summary: string;
     detail: string;
     category?: string | null;
