@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
+import { useTheme } from "vuetify";
 import type { TaskStatus } from "@/types/main";
 import type { ApiProject, ApiLog } from "@/types/main";
 import {
@@ -195,6 +196,13 @@ function columnBgColor(p: ApiProject): string {
     const order = roots.value.findIndex((r) => r.id === root.id);
     const hue = FAMILY_HUES[Math.max(0, order) % FAMILY_HUES.length];
     const lvl = p.level;
+    if (darkMode.value) {
+        // 深色：底色压暗，仅留低亮度色相
+        const sat = 70 - lvl * 6;
+        const light = 26 - lvl * 4;
+        const alpha = Math.max(0.55, 0.9 - lvl * 0.1);
+        return `hsla(${hue}, ${sat}%, ${light}%, ${alpha})`;
+    }
     const sat = 80 - lvl * 8;
     const light = 90 + lvl * 2;
     const alpha = Math.max(0.28, 0.9 - lvl * 0.12);
@@ -205,6 +213,7 @@ function columnTextColor(p: ApiProject): string {
     const root = rootOf(p);
     const order = roots.value.findIndex((r) => r.id === root.id);
     const hue = FAMILY_HUES[Math.max(0, order) % FAMILY_HUES.length];
+    if (darkMode.value) return `hsl(${hue}, 65%, 82%)`;
     return `hsl(${hue}, 55%, 30%)`;
 }
 /** 任务卡片左条按四象限上色：
@@ -614,6 +623,27 @@ const PX_PER_MIN = 2;
 const expandedDay = ref<string | null>(null);
 /** 时间精度（整点对齐网格，可全局调整） */
 const precision = ref(30);
+
+/* ---------- 深色模式 ---------- */
+const theme = useTheme();
+const darkMode = ref(
+    typeof localStorage !== "undefined" &&
+        localStorage.getItem("pt-dark") === "1",
+);
+function applyDark(v: boolean): void {
+    theme.global.name.value = v ? "dark" : "light";
+    document.documentElement.classList.toggle("dark", v);
+}
+applyDark(darkMode.value);
+function toggleDark(): void {
+    darkMode.value = !darkMode.value;
+    try {
+        localStorage.setItem("pt-dark", darkMode.value ? "1" : "0");
+    } catch {
+        /* 隐私模式下忽略 */
+    }
+    applyDark(darkMode.value);
+}
 const toMin = (t: string): number => {
     const [h, m] = t.split(":").map(Number);
     return h * 60 + m;
@@ -802,6 +832,25 @@ onMounted(() => {
                         hide-details
                         class="future-select"
                     />
+                    <v-btn
+                        icon
+                        size="small"
+                        variant="text"
+                        :title="
+                            darkMode
+                                ? '切换到浅色模式'
+                                : '切换到深色模式'
+                        "
+                        @click="toggleDark"
+                    >
+                        <v-icon>
+                            {{
+                                darkMode
+                                    ? "mdi-white-balance-sunny"
+                                    : "mdi-weather-night"
+                            }}
+                        </v-icon>
+                    </v-btn>
                     <v-btn
                         icon
                         size="small"
@@ -2423,5 +2472,158 @@ tr:hover .slot-add {
 .day-done .day-summary span {
     text-decoration: line-through;
     color: #94a3b8;
+}
+
+/* ================= 深色模式（html.dark 由深色切换写入） ================= */
+html.dark .app {
+    background: #0f172a;
+}
+html.dark .test-group {
+    background: #111c2e;
+}
+html.dark .brand-name {
+    color: #e2e8f0;
+}
+html.dark .empty-title,
+html.dark .proj-name,
+html.dark .summary,
+html.dark .confirm-text,
+html.dark .slot-entry,
+html.dark .day-summary {
+    color: #e2e8f0;
+}
+html.dark .proj-name:hover {
+    color: #93c5fd;
+}
+html.dark .click-date:hover {
+    color: #93c5fd;
+}
+html.dark .danger-item {
+    color: #f87171;
+}
+html.dark .cell-time,
+html.dark .fc-time,
+html.dark .slot-time,
+html.dark .day-proj,
+html.dark .day-detail,
+html.dark .filter-title,
+html.dark .axis-label {
+    color: #94a3b8;
+}
+html.dark .plus,
+html.dark .inline-add {
+    color: #60a5fa;
+}
+html.dark .cell-empty {
+    color: #475569;
+}
+html.dark .slot-dot {
+    color: #334155;
+}
+html.dark .line-done {
+    color: #64748b;
+}
+
+/* 表格 */
+html.dark thead th {
+    background: #111c2e;
+    color: #cbd5e1;
+    border-bottom-color: #334155;
+}
+html.dark tbody td {
+    border-bottom-color: #334155;
+    border-right-color: #334155;
+}
+html.dark tbody tr:hover td {
+    background: #16233b !important;
+}
+html.dark tbody tr.row-today td {
+    background: #1c2f4a !important;
+}
+html.dark tbody tr.row-weekend td {
+    background: #152037 !important;
+}
+html.dark tbody tr.row-today:hover td {
+    background: #22375a !important;
+}
+html.dark .date-col,
+html.dark tbody .date-col {
+    background: #0d1a2e;
+    color: #cbd5e1;
+}
+html.dark tbody tr.row-today .date-col {
+    background: #1c2f4a;
+}
+html.dark tbody tr.row-weekend .date-col {
+    background: #152037;
+}
+html.dark td.date-col {
+    border-right-color: #334155;
+}
+html.dark td.cell-empty:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+    outline-color: #64748b;
+}
+
+/* 状态徽章 */
+html.dark .badge.st-plan {
+    background: #252f40;
+    color: #cbd5e1;
+}
+html.dark .badge.st-progress {
+    background: #1d3a5f;
+    color: #93c5fd;
+}
+html.dark .badge.st-failed {
+    background: #4c1d24;
+    color: #fca5a5;
+}
+html.dark .badge.st-done {
+    background: #14532d;
+    color: #86efac;
+}
+html.dark .badge.st-delay {
+    background: #452a0d;
+    color: #fcd34d;
+}
+
+/* 时间轴画布与卡片 */
+html.dark .axis-line {
+    border-top-color: #334155;
+}
+html.dark .axis-line.axis-hour {
+    border-top-color: #475569;
+}
+html.dark .grid-line {
+    border-top-color: rgba(148, 163, 184, 0.18);
+}
+html.dark .grid-line.grid-hour {
+    border-top-color: rgba(148, 163, 184, 0.35);
+}
+html.dark .floating-card {
+    background: rgba(30, 41, 59, 0.95);
+    color: #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+html.dark .floating-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+}
+html.dark .slot-entry {
+    background: rgba(255, 255, 255, 0.06);
+}
+html.dark .slot-entry:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+html.dark .slot-head-row td {
+    background: #111c2e;
+}
+html.dark .slot-time-col {
+    background: #0d1a2e;
+}
+html.dark .slot-other-row td {
+    border-top-color: #334155;
+}
+html.dark .day-item {
+    border-bottom-color: #1e293b;
 }
 </style>
