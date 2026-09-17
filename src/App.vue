@@ -1192,13 +1192,13 @@ onMounted(() => {
     padding: 0 4px;
 }
 .brand-name {
-    font-size: 17px;
+    font-size: 18px;
     font-weight: 700;
     color: #0f172a;
     letter-spacing: 0.5px;
 }
 .brand-sub {
-    font-size: 12px;
+    font-size: 13px;
     color: #94a3b8;
 }
 .actions {
@@ -1228,14 +1228,14 @@ onMounted(() => {
     margin-bottom: 16px;
 }
 .filter-title {
-    font-size: 13px;
+    font-size: 14px;
     color: #64748b;
 }
 .filter-check {
     margin: 0;
 }
 .filter-label {
-    font-size: 13px;
+    font-size: 14px;
 }
 .empty {
     margin: 12vh auto 0;
@@ -1245,13 +1245,13 @@ onMounted(() => {
     color: #64748b;
 }
 .empty-title {
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 600;
     color: #334155;
     margin: 12px 0 4px;
 }
 .empty-sub {
-    font-size: 13px;
+    font-size: 14px;
     margin: 0;
 }
 
@@ -1268,7 +1268,7 @@ table {
     border-spacing: 0;
     width: 100%;
     min-width: 960px;
-    font-size: 13px;
+    font-size: 14px;
 }
 thead th {
     position: sticky;
@@ -1281,6 +1281,7 @@ thead th {
     padding: 6px 10px;
     border-bottom: 1px solid #e2e8f0;
     white-space: nowrap;
+    font-size: 14px;
 }
 tbody td {
     padding: 8px 14px;
@@ -1439,7 +1440,7 @@ tr:hover .plus {
 
 /* ---------- 弹窗 ---------- */
 .multi-title {
-    font-size: 15px;
+    font-size: 16px;
 }
 .multi-list {
     max-height: 320px;
@@ -1452,14 +1453,14 @@ tr:hover .plus {
     margin-top: 2px;
 }
 .meta-chip {
-    height: 18px;
-    font-size: 11px;
+    height: 20px;
+    font-size: 12px;
 }
 .multi-item :deep(.v-list-item__prepend) {
     margin-right: 12px;
 }
 .confirm-text {
-    font-size: 14px;
+    font-size: 15px;
     color: #334155;
 }
 </style>
