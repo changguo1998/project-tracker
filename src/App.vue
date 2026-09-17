@@ -1335,7 +1335,7 @@ onMounted(() => {
 table {
     border-collapse: separate;
     border-spacing: 0;
-    width: 100%;
+    width: max-content;
     min-width: 960px;
     font-size: 14px;
 }
