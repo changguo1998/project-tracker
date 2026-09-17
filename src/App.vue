@@ -1187,6 +1187,18 @@ onMounted(() => {
                                                 <v-icon
                                                     v-if="
                                                         primaryLog(p.id, d)!
+                                                            .urgent &&
+                                                        primaryLog(p.id, d)!
+                                                            .important
+                                                    "
+                                                    size="x-small"
+                                                    color="#ef4444"
+                                                >
+                                                    mdi-exclamation
+                                                </v-icon>
+                                                <v-icon
+                                                    v-else-if="
+                                                        primaryLog(p.id, d)!
                                                             .urgent
                                                     "
                                                     size="x-small"
@@ -1195,7 +1207,7 @@ onMounted(() => {
                                                     mdi-lightning-bolt
                                                 </v-icon>
                                                 <v-icon
-                                                    v-if="
+                                                    v-else-if="
                                                         primaryLog(p.id, d)!
                                                             .important
                                                     "
@@ -1437,7 +1449,20 @@ onMounted(() => {
                                                             "
                                                         >
                                                             <v-icon
-                                                                v-if="l.urgent"
+                                                                v-if="
+                                                                    l.urgent &&
+                                                                    l.important
+                                                                "
+                                                                size="x-small"
+                                                                color="#ef4444"
+                                                                class="fc-flag"
+                                                            >
+                                                                mdi-exclamation
+                                                            </v-icon>
+                                                            <v-icon
+                                                                v-else-if="
+                                                                    l.urgent
+                                                                "
                                                                 size="x-small"
                                                                 color="#f59e0b"
                                                                 class="fc-flag"
@@ -1445,7 +1470,7 @@ onMounted(() => {
                                                                 mdi-lightning-bolt
                                                             </v-icon>
                                                             <v-icon
-                                                                v-if="
+                                                                v-else-if="
                                                                     l.important
                                                                 "
                                                                 size="x-small"
@@ -1521,14 +1546,26 @@ onMounted(() => {
                                                         "
                                                     >
                                                         <v-icon
-                                                            v-if="l.urgent"
+                                                            v-if="
+                                                                l.urgent &&
+                                                                l.important
+                                                            "
+                                                            size="x-small"
+                                                            color="#ef4444"
+                                                        >
+                                                            mdi-exclamation
+                                                        </v-icon>
+                                                        <v-icon
+                                                            v-else-if="
+                                                                l.urgent
+                                                            "
                                                             size="x-small"
                                                             color="#f59e0b"
                                                         >
                                                             mdi-lightning-bolt
                                                         </v-icon>
                                                         <v-icon
-                                                            v-if="
+                                                            v-else-if="
                                                                 l.important
                                                             "
                                                             size="x-small"
@@ -1726,14 +1763,21 @@ onMounted(() => {
                                 :class="{ 'line-done': l.done }"
                             >
                                 <v-icon
-                                    v-if="l.urgent"
+                                    v-if="l.urgent && l.important"
+                                    size="x-small"
+                                    color="#ef4444"
+                                >
+                                    mdi-exclamation
+                                </v-icon>
+                                <v-icon
+                                    v-else-if="l.urgent"
                                     size="x-small"
                                     color="#f59e0b"
                                 >
                                     mdi-lightning-bolt
                                 </v-icon>
                                 <v-icon
-                                    v-if="l.important"
+                                    v-else-if="l.important"
                                     size="x-small"
                                     color="#3b82f6"
                                 >
