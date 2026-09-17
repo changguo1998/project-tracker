@@ -1184,18 +1184,18 @@ onMounted(() => {
                                                 class="log"
                                                 :title="`${primaryLog(p.id, d)!.summary}${metaText(primaryLog(p.id, d)!) ? '\n' + metaText(primaryLog(p.id, d)!) : ''}`"
                                             >
-                                                <v-icon
+                                                <span
                                                     v-if="
                                                         primaryLog(p.id, d)!
                                                             .urgent &&
                                                         primaryLog(p.id, d)!
                                                             .important
                                                     "
-                                                    size="x-small"
-                                                    color="#ef4444"
+                                                    class="pmark"
+                                                    title="紧急且重要"
                                                 >
-                                                    mdi-exclamation
-                                                </v-icon>
+                                                    !
+                                                </span>
                                                 <v-icon
                                                     v-else-if="
                                                         primaryLog(p.id, d)!
@@ -1448,17 +1448,16 @@ onMounted(() => {
                                                                 openLogEdit(l)
                                                             "
                                                         >
-                                                            <v-icon
+                                                            <span
                                                                 v-if="
                                                                     l.urgent &&
                                                                     l.important
                                                                 "
-                                                                size="x-small"
-                                                                color="#ef4444"
-                                                                class="fc-flag"
+                                                                class="pmark"
+                                                                title="紧急且重要"
                                                             >
-                                                                mdi-exclamation
-                                                            </v-icon>
+                                                                !
+                                                            </span>
                                                             <v-icon
                                                                 v-else-if="
                                                                     l.urgent
@@ -1545,16 +1544,16 @@ onMounted(() => {
                                                             openLogEdit(l)
                                                         "
                                                     >
-                                                        <v-icon
+                                                        <span
                                                             v-if="
                                                                 l.urgent &&
                                                                 l.important
                                                             "
-                                                            size="x-small"
-                                                            color="#ef4444"
+                                                            class="pmark"
+                                                            title="紧急且重要"
                                                         >
-                                                            mdi-exclamation
-                                                        </v-icon>
+                                                            !
+                                                        </span>
                                                         <v-icon
                                                             v-else-if="
                                                                 l.urgent
@@ -1762,13 +1761,13 @@ onMounted(() => {
                             <v-list-item-title
                                 :class="{ 'line-done': l.done }"
                             >
-                                <v-icon
+                                <span
                                     v-if="l.urgent && l.important"
-                                    size="x-small"
-                                    color="#ef4444"
+                                    class="pmark"
+                                    title="紧急且重要"
                                 >
-                                    mdi-exclamation
-                                </v-icon>
+                                    !
+                                </span>
                                 <v-icon
                                     v-else-if="l.urgent"
                                     size="x-small"
@@ -2328,6 +2327,24 @@ tr:hover .slot-add {
     overflow: hidden;
     text-overflow: ellipsis;
     vertical-align: middle;
+}
+/* 优先级徽章：紧急+重要=红底白 ! */
+.pmark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background-color: #ef4444;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0 2px;
+    margin-right: 2px;
+    vertical-align: middle;
+    flex: none;
 }
 .slot-none-row td {
     padding: 20px 14px;
