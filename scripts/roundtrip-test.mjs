@@ -214,6 +214,8 @@ async function run() {
                 status,
                 summary,
                 detail: "同日多日志测试",
+                category: "开发",
+                tags: ["冒烟", "回归"],
             }),
         });
     const l1 = (await mkLog("progress", "联调进行中")).log;
@@ -225,7 +227,11 @@ async function run() {
         await api(`/api/logs/${l1.id}`, {
             method: "PATCH",
             headers: json,
-            body: JSON.stringify({ status: "delay", summary: "联调超时" }),
+            body: JSON.stringify({
+                status: "delay",
+                summary: "联调超时",
+                tags: ["全量"],
+            }),
         })
     ).log;
     assert(
@@ -260,7 +266,9 @@ async function run() {
                 got.date === l.date &&
                 got.status === l.status &&
                 got.summary === l.summary &&
-                got.detail === l.detail,
+                got.detail === l.detail &&
+                got.category === (l.category ?? null) &&
+                (got.tags ?? []).join(",") === (l.tags ?? []).join(","),
             `日志 ${l.id} 字段不一致`,
         );
     }

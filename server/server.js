@@ -30,8 +30,19 @@ db.exec(`CREATE TABLE IF NOT EXISTS logs(
   status TEXT,
   summary TEXT,
   detail TEXT,
+  category TEXT,
+  tags TEXT,
   updatedAt TEXT
 )`);
+
+// 幂等迁移：老库（无 category/tags 列）补齐字段
+const logCols = db
+  .prepare("PRAGMA table_info(logs)")
+  .all()
+  .map((c) => c.name);
+if (!logCols.includes("category"))
+  db.exec("ALTER TABLE logs ADD COLUMN category TEXT");
+if (!logCols.includes("tags")) db.exec("ALTER TABLE logs ADD COLUMN tags TEXT");
 
 const VALID_STATUS = new Set(["plan", "progress", "failed", "done", "delay"]);
 const now = () => new Date().toISOString();
@@ -77,11 +88,21 @@ app.get("/api/state", (req, res) => {
   const projects = db
     .prepare("SELECT id, parentID, name, level FROM projects ORDER BY name")
     .all();
+  const parseTags = (t) => {
+    if (t == null) return [];
+    try {
+      const a = JSON.parse(t);
+      return Array.isArray(a) ? a : [];
+    } catch {
+      return [];
+    }
+  };
   const logs = db
     .prepare(
-      "SELECT id, projectID, date, status, summary, detail FROM logs ORDER BY date",
+      "SELECT id, projectID, date, status, summary, detail, category, tags FROM logs ORDER BY date",
     )
-    .all();
+    .all()
+    .map((l) => ({ ...l, tags: parseTags(l.tags) }));
   res.json({ projects, logs });
 });
 
@@ -202,13 +223,35 @@ app.post("/api/logs", (req, res) => {
     return res.status(400).json(bodyError("summary: 类型错误"));
   if (b.detail !== undefined && typeof b.detail !== "string")
     return res.status(400).json(bodyError("detail: 类型错误"));
-
   const id = crypto.randomUUID();
+  if (
+    b.category !== undefined &&
+    b.category !== null &&
+    typeof b.category !== "string"
+  )
+    return res.status(400).json(bodyError("category: 类型错误"));
+  if (
+    b.tags !== undefined &&
+    (!Array.isArray(b.tags) || b.tags.some((t) => typeof t !== "string"))
+  )
+    return res.status(400).json(bodyError("tags: 字符串数组"));
   const summary = b.summary ?? "";
   const detail = b.detail ?? "";
+  const category = b.category ?? null;
+  const tags = JSON.stringify(b.tags ?? []);
   db.prepare(
-    "INSERT INTO logs(id, projectID, date, status, summary, detail, updatedAt) VALUES (?,?,?,?,?,?,?)",
-  ).run(id, b.projectID, b.date, b.status, summary, detail, now());
+    "INSERT INTO logs(id, projectID, date, status, summary, detail, category, tags, updatedAt) VALUES (?,?,?,?,?,?,?,?,?)",
+  ).run(
+    id,
+    b.projectID,
+    b.date,
+    b.status,
+    summary,
+    detail,
+    category,
+    tags,
+    now(),
+  );
   const log = {
     id,
     projectID: b.projectID,
@@ -216,6 +259,8 @@ app.post("/api/logs", (req, res) => {
     status: b.status,
     summary,
     detail,
+    category,
+    tags: b.tags ?? [],
   };
   res.status(201).json({ id, log });
 });
@@ -234,7 +279,14 @@ app.patch("/api/logs/:id", (req, res) => {
   if (!existing) return res.status(404).json(bodyError("not found"));
 
   const fields = {};
-  for (const key of ["date", "status", "summary", "detail"]) {
+  for (const key of [
+    "date",
+    "status",
+    "summary",
+    "detail",
+    "category",
+    "tags",
+  ]) {
     if (key in b) fields[key] = b[key];
   }
   if (
@@ -264,6 +316,20 @@ app.patch("/api/logs/:id", (req, res) => {
     return res.status(400).json(bodyError("detail: 类型错误"));
   }
 
+  if (
+    "category" in fields &&
+    fields.category !== null &&
+    typeof fields.category !== "string"
+  )
+    return res.status(400).json(bodyError("category: 类型错误"));
+  if (
+    "tags" in fields &&
+    (!Array.isArray(fields.tags) ||
+      fields.tags.some((t) => typeof t !== "string"))
+  )
+    return res.status(400).json(bodyError("tags: 字符串数组"));
+  if ("tags" in fields) fields.tags = JSON.stringify(fields.tags);
+
   const assignments = Object.keys(fields)
     .map((k) => `${k} = ?`)
     .join(", ");
@@ -274,10 +340,17 @@ app.patch("/api/logs/:id", (req, res) => {
   );
   const row = db
     .prepare(
-      "SELECT id, projectID, date, status, summary, detail FROM logs WHERE id = ?",
+      "SELECT id, projectID, date, status, summary, detail, category, tags FROM logs WHERE id = ?",
     )
     .get(req.params.id);
-  res.json({ log: row });
+  let tagsArr = [];
+  try {
+    const a = JSON.parse(row.tags);
+    if (Array.isArray(a)) tagsArr = a;
+  } catch {
+    // 历史脏数据，按空标签处理
+  }
+  res.json({ log: { ...row, tags: tagsArr } });
 });
 
 // DELETE /api/logs/:id
@@ -294,13 +367,13 @@ app.delete("/api/logs/:id", (req, res) => {
 const DIST_DIR = path.resolve(import.meta.dirname, "../dist");
 if (fs.existsSync(DIST_DIR)) {
   app.use(express.static(DIST_DIR));
-  app.get("*", (req, res) => res.sendFile(path.join(DIST_DIR, "index.html")));
+  app.get("*", (_req, res) => res.sendFile(path.join(DIST_DIR, "index.html")));
 } else {
   console.warn(`dist 不存在于 ${DIST_DIR}，仅 API 可用`);
 }
 
 // 非法 JSON body 统一 400 JSON 错误体
-app.use((err, req, res, next) => {
+app.use((err, _req, res, next) => {
   if (err && err.type === "entity.parse.failed") {
     return res.status(400).json(bodyError("invalid JSON"));
   }

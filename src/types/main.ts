@@ -21,6 +21,10 @@ export interface LogRec {
     status: TaskStatus;
     summary: string;
     detail: string;
+    /** 分类：单选，可空 */
+    category: string | null;
+    /** 标签：多选 */
+    tags: string[];
 }
 
 /** API 层别名，便于 api.ts 契约清晰表达 */

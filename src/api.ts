@@ -71,6 +71,8 @@ export async function addLog(p: {
     status: TaskStatus;
     summary: string;
     detail: string;
+    category?: string | null;
+    tags?: string[];
 }): Promise<ApiLog> {
     const body = await request<{ id: string; log: ApiLog }>("/api/logs", {
         method: "POST",

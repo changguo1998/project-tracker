@@ -61,6 +61,17 @@ const STATUS_NAME: Record<TaskStatus, string> = {
 };
 const STATUS_ITEMS = STATUS.map((s) => ({ title: STATUS_NAME[s], value: s }));
 
+
+const CATEGORY_POOL = [
+    "开发",
+    "测试",
+    "设计",
+    "会议",
+    "文档",
+    "运维",
+    "其他",
+];
+const DEFAULT_TAGS = ["紧急", "阻塞", "重点", "本周"];
 const DAYS = 14;
 
 /* ---------- 状态 ---------- */
@@ -137,6 +148,20 @@ const primaryLog = (pid: string, d: string): ApiLog | undefined =>
 const logCount = computed(() => logs.value.length);
 const totalDays = computed(() => dates.value.length);
 const hasData = computed(() => projects.value.length > 0);
+
+/* ---------- 分类 / 标签 ---------- */
+const tagSuggestions = computed<string[]>(() => {
+    const s = new Set<string>(DEFAULT_TAGS);
+    for (const l of logs.value) for (const t of l.tags) if (t) s.add(t);
+    return [...s];
+});
+/** 单元格 tooltip 用的分类/标签文本 */
+const metaText = (l: ApiLog): string => {
+    const parts: string[] = [];
+    if (l.category) parts.push(`分类:${l.category}`);
+    if (l.tags.length) parts.push(`标签:${l.tags.join(",")}`);
+    return parts.join(" · ");
+};
 
 /* ---------- 与后端交互 ---------- */
 let firstLoad = true;
@@ -289,6 +314,8 @@ interface LogDlg {
     status: TaskStatus;
     summary: string;
     detail: string;
+    category: string;
+    tags: string[];
 }
 const logDlg = ref<LogDlg>({
     open: false,
@@ -298,6 +325,8 @@ const logDlg = ref<LogDlg>({
     status: "plan",
     summary: "",
     detail: "",
+    category: "",
+    tags: [],
 });
 function openLogNew(p: ApiProject, d: string): void {
     multiDlg.value.open = false;
@@ -309,6 +338,8 @@ function openLogNew(p: ApiProject, d: string): void {
         status: "plan",
         summary: "",
         detail: "",
+        category: "",
+        tags: [],
     };
 }
 function openLogEdit(l: ApiLog): void {
@@ -322,6 +353,8 @@ function openLogEdit(l: ApiLog): void {
         status: l.status,
         summary: l.summary,
         detail: l.detail,
+        category: l.category ?? "",
+        tags: [...l.tags],
     };
 }
 async function saveLog(): Promise<void> {
@@ -335,6 +368,8 @@ async function saveLog(): Promise<void> {
                 status: d.status,
                 summary: d.summary,
                 detail: d.detail,
+                category: String(d.category ?? "").trim() || null,
+                tags: d.tags.filter((t) => t.trim()),
             });
         } else {
             await addLog({
@@ -343,6 +378,8 @@ async function saveLog(): Promise<void> {
                 status: d.status,
                 summary: d.summary,
                 detail: d.detail,
+                category: String(d.category ?? "").trim() || null,
+                tags: d.tags.filter((t) => t.trim()),
             });
         }
         d.open = false;
@@ -615,6 +652,7 @@ onMounted(() => {
                                             <div
                                                 class="log clickable"
                                                 @click="openCell(p, d)"
+                                                :title="`${STATUS_NAME[primaryLog(p.id, d)!.status]} · ${primaryLog(p.id, d)!.summary}${metaText(primaryLog(p.id, d)!) ? '\n' + metaText(primaryLog(p.id, d)!) : ''}`"
                                             >
                                                 <v-chip
                                                     size="x-small"
@@ -724,6 +762,23 @@ onMounted(() => {
                         label="状态"
                         density="compact"
                     />
+
+                    <v-combobox
+                        v-model="logDlg.category"
+                        :items="CATEGORY_POOL"
+                        label="分类（单选，可自定义）"
+                        density="compact"
+                        clearable
+                    />
+                    <v-combobox
+                        v-model="logDlg.tags"
+                        :items="tagSuggestions"
+                        label="标签（多选，回车添加）"
+                        density="compact"
+                        multiple
+                        small-chips
+                        clearable
+                    />
                     <v-text-field
                         v-model="logDlg.summary"
                         label="摘要"
@@ -788,6 +843,27 @@ onMounted(() => {
                             <v-list-item-subtitle>
                                 {{ l.detail }}
                             </v-list-item-subtitle>
+
+                            <div v-if="l.category || l.tags.length" class="log-meta">
+                                <v-chip
+                                    v-if="l.category"
+                                    size="x-small"
+                                    variant="flat"
+                                    color="primary"
+                                    class="meta-chip"
+                                >
+                                    {{ l.category }}
+                                </v-chip>
+                                <v-chip
+                                    v-for="t in l.tags"
+                                    :key="t"
+                                    size="x-small"
+                                    variant="outlined"
+                                    class="meta-chip"
+                                >
+                                    #{{ t }}
+                                </v-chip>
+                            </div>
                             <template #append>
                                 <v-btn
                                     icon
@@ -1081,6 +1157,16 @@ tr:hover .plus {
 .multi-list {
     max-height: 320px;
     overflow-y: auto;
+}
+.log-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 2px;
+}
+.meta-chip {
+    height: 18px;
+    font-size: 11px;
 }
 .multi-item :deep(.v-list-item__prepend) {
     margin-right: 12px;
