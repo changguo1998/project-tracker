@@ -628,8 +628,9 @@ onMounted(() => {
                     </div>
                 </v-card>
 
+                <template v-else>
                 <!-- 项目筛选栏：勾选要在表格中渲染的项目 -->
-                <v-card v-if="hasData && roots.length" class="filter-bar">
+                <v-card v-if="roots.length" class="filter-bar">
                     <span class="filter-title">显示：</span>
                     <v-checkbox
                         v-for="r in roots"
@@ -655,6 +656,18 @@ onMounted(() => {
                 </v-card>
 
                 <!-- 日期 × 项目表格 -->
+                <v-card
+                    v-if="visibleProjects.length === 0"
+                    class="empty"
+                >
+                    <v-icon size="52" color="secondary">
+                        mdi-filter-off-outline
+                    </v-icon>
+                    <div class="empty-title">未勾选项目</div>
+                    <div class="empty-sub">
+                        在上方勾选要显示的项目
+                    </div>
+                </v-card>
                 <v-card v-else class="table-card">
                     <div class="table-scroll">
                         <table>
@@ -668,7 +681,7 @@ onMounted(() => {
                                             日期
                                         </th>
                                         <th
-                                            v-for="r in roots"
+                                            v-for="r in selectedRootsList"
                                             :key="r.id"
                                             :colspan="subtreeSpan(r)"
                                             class="band"
@@ -929,6 +942,7 @@ onMounted(() => {
                         </table>
                     </div>
                 </v-card>
+                </template>
             </v-container>
         </v-main>
 
