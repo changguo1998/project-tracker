@@ -84,6 +84,8 @@ const CATEGORY_POOL = [
 ];
 const DEFAULT_TAGS = ["紧急", "阻塞", "重点", "本周"];
 const DAYS = 14;
+/** 表格只展示到该层级：0=仅根，1=根+直接子级 */
+const MAX_DEPTH = 1;
 
 /* ---------- 状态 ---------- */
 const projects = ref<ApiProject[]>([]);
@@ -144,7 +146,8 @@ const visibleProjects = computed<ApiProject[]>(() => {
     const walk = (list: ApiProject[]): void => {
         for (const p of list) {
             acc.push(p);
-            if (expanded.value.has(p.id)) walk(childrenOf(p.id));
+            if (expanded.value.has(p.id) && p.level < MAX_DEPTH)
+                walk(childrenOf(p.id));
         }
     };
     walk(selectedRootsList.value);
@@ -160,7 +163,7 @@ const hasSubtree = computed(() =>
 /** 该组可见列数（自身 + 展开的子孙），用于父级分组带 colspan */
 function subtreeSpan(p: ApiProject): number {
     let n = 1;
-    if (expanded.value.has(p.id)) {
+    if (expanded.value.has(p.id) && p.level < MAX_DEPTH) {
         for (const c of childrenOf(p.id)) n += subtreeSpan(c);
     }
     return n;
@@ -699,7 +702,10 @@ onMounted(() => {
                                         >
                                             <div class="proj-head band-head">
                                                 <v-btn
-                                                    v-if="hasChildren(r.id)"
+                                                    v-if="
+                                                        hasChildren(r.id) &&
+                                                        r.level < MAX_DEPTH
+                                                    "
                                                     icon
                                                     size="x-small"
                                                     variant="plain"
@@ -793,7 +799,10 @@ onMounted(() => {
                                             }"
                                         >
                                             <v-btn
-                                                v-if="hasChildren(p.id)"
+                                                v-if="
+                                                    hasChildren(p.id) &&
+                                                    p.level < MAX_DEPTH
+                                                "
                                                 icon
                                                 size="x-small"
                                                 variant="plain"
