@@ -676,11 +676,15 @@ function toggleDay(d: string): void {
     expandedDay.value = expandedDay.value === d ? null : d;
 }
 
-/** 点击单元格：多条开列表，单条直接编辑 */
+/** 点击单元格：空格直接新增；多条开列表；单条直接编辑 */
 function openCell(p: ApiProject, d: string): void {
     const ls = cellLogs(p.id, d);
+    if (!ls.length) {
+        openLogNew(p, d);
+        return;
+    }
     if (ls.length > 1) openMulti(p, d);
-    else if (ls.length === 1) openLogEdit(ls[0]);
+    else openLogEdit(ls[0]);
 }
 
 /* 通用确认框 */
@@ -1129,11 +1133,11 @@ onMounted(() => {
                                         :style="{
                                             backgroundColor: columnBgColor(p),
                                         }"
+                                        @click="openCell(p, d)"
                                     >
                                         <template v-if="primaryLog(p.id, d)">
                                             <div
-                                                class="log clickable"
-                                                @click="openCell(p, d)"
+                                                class="log"
                                                 :title="`${primaryLog(p.id, d)!.summary}${metaText(primaryLog(p.id, d)!) ? '\n' + metaText(primaryLog(p.id, d)!) : ''}`"
                                             >
                                                 <span
@@ -1173,14 +1177,19 @@ onMounted(() => {
                                                         1
                                                     }}
                                                 </v-chip>
+                                                <span
+                                                    class="inline-add"
+                                                    title="添加该日条目"
+                                                    @click.stop="
+                                                        openLogNew(p, d)
+                                                    "
+                                                >
+                                                    ＋
+                                                </span>
                                             </div>
                                         </template>
-                                        <span
-                                            v-else
-                                            class="plus clickable"
-                                            @click="openLogNew(p, d)"
-                                        >
-                                            ＋
+                                        <span v-else class="plus">
+                                            ＋ 添加
                                         </span>
                                     </td>
                                 </tr>
@@ -1284,6 +1293,13 @@ onMounted(() => {
                                                         backgroundColor:
                                                             columnBgColor(p),
                                                     }"
+                                                    @click="
+                                                        onCanvasClick(
+                                                            $event,
+                                                            p,
+                                                            d,
+                                                        )
+                                                    "
                                                 >
                                                     <div
                                                         class="day-canvas"
@@ -1292,13 +1308,6 @@ onMounted(() => {
                                                                 canvasH(d) +
                                                                 'px',
                                                         }"
-                                                        @click.self="
-                                                            onCanvasClick(
-                                                                $event,
-                                                                p,
-                                                                d,
-                                                            )
-                                                        "
                                                     >
                                                         <div
                                                             v-for="g in gridLines(
@@ -1807,7 +1816,7 @@ thead th {
     font-weight: 600;
     text-align: left;
     padding: 6px 10px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #cbd5e1;
     white-space: nowrap;
     font-size: 14px;
 }
@@ -1827,7 +1836,8 @@ thead tr:last-child:not(:only-child) th {
 }
 tbody td {
     padding: 8px 14px;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0;
     vertical-align: middle;
 }
 tbody tr:hover td {
@@ -1867,7 +1877,7 @@ tbody tr.row-weekend .date-col {
     background: #f5f3ef;
 }
 td.date-col {
-    border-right: 1px solid #e2e8f0;
+    border-right: 1px solid #cbd5e1;
 }
 .date-text {
     margin-right: 6px;
@@ -1923,25 +1933,49 @@ td.date-col {
 .cell {
     min-width: 132px;
     max-width: 220px;
+    cursor: pointer;
 }
 .cell-empty {
     color: #cbd5e1;
     text-align: center;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+td.cell-empty:hover {
+    outline: 1px dashed #94a3b8;
+    outline-offset: -4px;
+    background: rgba(255, 255, 255, 0.45) !important;
 }
 .clickable {
     cursor: pointer;
 }
 .plus {
-    opacity: 0;
-    transition: opacity 0.15s;
+    color: #94a3b8;
+    font-size: 14px;
+    transition: color 0.15s;
 }
 tr:hover .plus {
-    opacity: 0.7;
+    color: #2563eb;
 }
 .log {
     display: flex;
     align-items: center;
     gap: 8px;
+}
+.inline-add {
+    margin-left: auto;
+    color: #2563eb;
+    font-size: 15px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+.cell:hover .inline-add {
+    opacity: 1;
+}
+.cell:hover .inline-add:hover {
+    opacity: 1;
+    font-weight: 700;
 }
 .badge {
     flex: 0 0 auto;
@@ -2066,6 +2100,7 @@ tr:hover .slot-add {
     left: 0;
     right: 0;
     border-top: 1px solid #e2e8f0;
+    pointer-events: none;
 }
 .axis-line.axis-hour {
     border-top-color: #cbd5e1;
@@ -2076,10 +2111,12 @@ tr:hover .slot-add {
     transform: translateY(-6px);
     font-size: 11px;
     color: #64748b;
+    pointer-events: none;
 }
 .canvas-cell {
     padding: 0 !important;
     vertical-align: top;
+    cursor: pointer;
 }
 .day-canvas {
     position: relative;
@@ -2090,6 +2127,7 @@ tr:hover .slot-add {
     left: 0;
     right: 0;
     border-top: 1px solid rgba(203, 213, 225, 0.35);
+    pointer-events: none;
 }
 .grid-line.grid-hour {
     border-top-color: rgba(148, 163, 184, 0.5);
