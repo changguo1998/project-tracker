@@ -26,6 +26,12 @@ export interface LogRec {
     category: string | null;
     /** 标签：多选 */
     tags: string[];
+    /** 开始时间 HH:mm，可空（不跨天） */
+    timeStart: string | null;
+    /** 结束时间 HH:mm，可空 */
+    timeEnd: string | null;
+    /** 完成标记（逐条粒度） */
+    done: boolean;
 }
 
 /** API 层别名，便于 api.ts 契约清晰表达 */

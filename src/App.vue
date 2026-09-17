@@ -441,6 +441,9 @@ interface LogDlg {
     detail: string;
     category: string;
     tags: string[];
+    timeStart: string;
+    timeEnd: string;
+    done: boolean;
 }
 const logDlg = ref<LogDlg>({
     open: false,
@@ -451,6 +454,9 @@ const logDlg = ref<LogDlg>({
     detail: "",
     category: "",
     tags: [],
+    timeStart: "",
+    timeEnd: "",
+    done: false,
 });
 function openLogNew(p: ApiProject, d: string): void {
     multiDlg.value.open = false;
@@ -463,6 +469,9 @@ function openLogNew(p: ApiProject, d: string): void {
         detail: "",
         category: "",
         tags: [],
+        timeStart: "",
+        timeEnd: "",
+        done: false,
     };
 }
 function openLogEdit(l: ApiLog): void {
@@ -477,6 +486,9 @@ function openLogEdit(l: ApiLog): void {
         detail: l.detail,
         category: l.category ?? "",
         tags: [...l.tags],
+        timeStart: l.timeStart ?? "",
+        timeEnd: l.timeEnd ?? "",
+        done: l.done,
     };
 }
 async function saveLog(): Promise<void> {
@@ -491,6 +503,9 @@ async function saveLog(): Promise<void> {
                 detail: d.detail,
                 category: String(d.category ?? "").trim() || null,
                 tags: d.tags.filter((t) => t.trim()),
+                timeStart: d.timeStart || null,
+                timeEnd: d.timeEnd || null,
+                done: d.done,
             });
         } else {
             await addLog({
@@ -500,6 +515,9 @@ async function saveLog(): Promise<void> {
                 detail: d.detail,
                 category: String(d.category ?? "").trim() || null,
                 tags: d.tags.filter((t) => t.trim()),
+                timeStart: d.timeStart || null,
+                timeEnd: d.timeEnd || null,
+                done: d.done,
             });
         }
         d.open = false;
@@ -538,6 +556,37 @@ const multiLogs = computed<ApiLog[]>(() => {
 });
 function openMulti(p: ApiProject, d: string): void {
     multiDlg.value = { open: true, project: p, date: d };
+}
+
+/* 当日日程：点击日期展开 */
+const dayDlg = ref<{ open: boolean; date: string }>({ open: false, date: "" });
+const projOf = (l: ApiLog): ApiProject | undefined =>
+    projects.value.find((p) => p.id === l.projectID);
+const dayLogs = computed<ApiLog[]>(() => {
+    const d = dayDlg.value.date;
+    return logs.value
+        .filter((l) => l.date === d)
+        .sort((a, b) => {
+            const ta = a.timeStart ?? "99:99";
+            const tb = b.timeStart ?? "99:99";
+            return ta < tb ? -1 : ta > tb ? 1 : 0;
+        });
+});
+function openDay(d: string): void {
+    dayDlg.value = { open: true, date: d };
+}
+async function toggleDone(l: ApiLog): Promise<void> {
+    busy.value = true;
+    error.value = "";
+    try {
+        await patchLog(l.id, { done: !l.done });
+        await load();
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : String(e);
+        await load();
+    } finally {
+        busy.value = false;
+    }
 }
 
 /** 点击单元格：多条开列表，单条直接编辑 */
@@ -959,7 +1008,13 @@ onMounted(() => {
                                     }"
                                 >
                                     <td class="date-col">
-                                        <span class="date-text">{{ d }}</span>
+                                        <span
+                                            class="date-text click-date"
+                                            :title="'展开该日日程'"
+                                            @click="openDay(d)"
+                                        >
+                                            {{ d }}
+                                        </span>
                                         <v-chip
                                             v-if="isToday(d)"
                                             size="x-small"
@@ -986,7 +1041,23 @@ onMounted(() => {
                                                 @click="openCell(p, d)"
                                                 :title="`${primaryLog(p.id, d)!.summary}${metaText(primaryLog(p.id, d)!) ? '\n' + metaText(primaryLog(p.id, d)!) : ''}`"
                                             >
-                                                <span class="summary">
+                                                <span
+                                                    v-if="primaryLog(p.id, d)!.timeStart"
+                                                    class="cell-time"
+                                                >
+                                                    {{
+                                                        primaryLog(p.id, d)!
+                                                            .timeStart
+                                                    }}
+                                                </span>
+                                                <span
+                                                    class="summary"
+                                                    :class="{
+                                                        'line-done':
+                                                            primaryLog(p.id, d)!
+                                                                .done,
+                                                    }"
+                                                >
                                                     {{
                                                         primaryLog(p.id, d)!
                                                             .summary
@@ -1081,6 +1152,29 @@ onMounted(() => {
                     · {{ logDlg.project.name }} · {{ logDlg.date }}
                 </v-card-title>
                 <v-card-text>
+                    <div class="time-row">
+                        <v-text-field
+                            v-model="logDlg.timeStart"
+                            label="开始时间"
+                            type="time"
+                            density="compact"
+                            hide-details
+                        />
+                        <v-text-field
+                            v-model="logDlg.timeEnd"
+                            label="结束时间"
+                            type="time"
+                            density="compact"
+                            hide-details
+                        />
+                        <v-checkbox
+                            v-model="logDlg.done"
+                            label="已完成"
+                            density="compact"
+                            hide-details
+                            class="done-check"
+                        />
+                    </div>
                     <v-combobox
                         v-model="logDlg.category"
                         :items="CATEGORY_POOL"
@@ -1149,7 +1243,19 @@ onMounted(() => {
                             :key="l.id"
                             class="multi-item"
                         >
-                            <v-list-item-title>{{ l.summary }}</v-list-item-title>
+                            <v-list-item-title
+                                :class="{ 'line-done': l.done }"
+                            >
+                                <template v-if="l.timeStart">
+                                    <span class="cell-time">
+                                        {{ l.timeStart }}
+                                        {{
+                                            l.timeEnd ? `–${l.timeEnd}` : ""
+                                        }}
+                                    </span>
+                                </template>
+                                {{ l.summary }}
+                            </v-list-item-title>
                             <v-list-item-subtitle>
                                 {{ l.detail }}
                             </v-list-item-subtitle>
@@ -1204,6 +1310,107 @@ onMounted(() => {
                     </v-btn>
                     <v-spacer />
                     <v-btn variant="text" @click="multiDlg.open = false">
+                        关闭
+                    </v-btn>
+                </v-card-actions>
+            </v-card>
+        </v-dialog>
+
+        <!-- 当日日程展开 -->
+        <v-dialog v-model="dayDlg.open" max-width="560">
+            <v-card v-if="dayDlg.date">
+                <v-card-title class="day-title">
+                    {{ dayDlg.date }} · 当日日程（{{ dayLogs.length }} 条）
+                </v-card-title>
+                <v-card-text>
+                    <div v-if="!dayLogs.length" class="day-empty">
+                        当天暂无安排，可在表格该日对应项目格中点＋新增
+                    </div>
+                    <div
+                        v-for="l in dayLogs"
+                        :key="l.id"
+                        class="day-item"
+                        :class="{ 'day-done': l.done }"
+                    >
+                        <v-checkbox
+                            :model-value="l.done"
+                            density="compact"
+                            hide-details
+                            class="day-check"
+                            @update:model-value="toggleDone(l)"
+                        />
+                        <div class="day-body">
+                            <div class="day-proj">
+                                {{
+                                    projOf(l)?.name ?? "（已删除项目）"
+                                }}
+                            </div>
+                            <div class="day-summary">
+                                <v-chip
+                                    v-if="l.timeStart"
+                                    size="x-small"
+                                    variant="outlined"
+                                    class="day-time"
+                                >
+                                    {{
+                                        l.timeStart +
+                                        (l.timeEnd ? `–${l.timeEnd}` : "")
+                                    }}
+                                </v-chip>
+                                <span :class="{ 'line-done': l.done }">
+                                    {{ l.summary }}
+                                </span>
+                            </div>
+                            <div v-if="l.detail" class="day-detail">
+                                {{ l.detail }}
+                            </div>
+                            <div
+                                v-if="l.category || l.tags.length"
+                                class="log-meta"
+                            >
+                                <v-chip
+                                    v-if="l.category"
+                                    size="x-small"
+                                    variant="flat"
+                                    color="primary"
+                                    class="meta-chip"
+                                >
+                                    {{ l.category }}
+                                </v-chip>
+                                <v-chip
+                                    v-for="t in l.tags"
+                                    :key="t"
+                                    size="x-small"
+                                    variant="outlined"
+                                    class="meta-chip"
+                                >
+                                    #{{ t }}
+                                </v-chip>
+                            </div>
+                        </div>
+                        <div class="day-ops">
+                            <v-btn
+                                icon
+                                size="x-small"
+                                variant="text"
+                                @click="openLogEdit(l)"
+                            >
+                                <v-icon>mdi-pencil</v-icon>
+                            </v-btn>
+                            <v-btn
+                                icon
+                                size="x-small"
+                                variant="text"
+                                @click="askDeleteLog(l)"
+                            >
+                                <v-icon>mdi-delete</v-icon>
+                            </v-btn>
+                        </div>
+                    </div>
+                </v-card-text>
+                <v-card-actions>
+                    <v-spacer />
+                    <v-btn variant="text" @click="dayDlg.open = false">
                         关闭
                     </v-btn>
                 </v-card-actions>
@@ -1542,5 +1749,89 @@ tr:hover .plus {
 .confirm-text {
     font-size: 15px;
     color: #334155;
+}
+
+/* 时间输入行 */
+.time-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+.done-check {
+    margin-top: 2px;
+}
+
+/* 单元格时间前缀 / 完成划线 */
+.cell-time {
+    color: #94a3b8;
+    font-size: 12px;
+    white-space: nowrap;
+}
+.line-done {
+    text-decoration: line-through;
+    color: #94a3b8;
+}
+
+/* 日期列点击 */
+.click-date {
+    cursor: pointer;
+}
+.click-date:hover {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+/* 当日日程弹窗 */
+.day-title {
+    font-size: 16px;
+}
+.day-empty {
+    padding: 24px 8px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 13px;
+}
+.day-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 4px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.day-check {
+    margin-top: 2px;
+}
+.day-body {
+    flex: 1;
+    min-width: 0;
+}
+.day-proj {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 600;
+}
+.day-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #334155;
+}
+.day-time {
+    flex: 0 0 auto;
+}
+.day-detail {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 2px;
+}
+.day-ops {
+    display: flex;
+    gap: 2px;
+}
+.day-done .day-summary span {
+    text-decoration: line-through;
+    color: #94a3b8;
 }
 </style>

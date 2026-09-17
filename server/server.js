@@ -44,6 +44,12 @@ const logCols = db
 if (!logCols.includes("category"))
   db.exec("ALTER TABLE logs ADD COLUMN category TEXT");
 if (!logCols.includes("tags")) db.exec("ALTER TABLE logs ADD COLUMN tags TEXT");
+if (!logCols.includes("timeStart"))
+  db.exec("ALTER TABLE logs ADD COLUMN timeStart TEXT");
+if (!logCols.includes("timeEnd"))
+  db.exec("ALTER TABLE logs ADD COLUMN timeEnd TEXT");
+if (!logCols.includes("done"))
+  db.exec("ALTER TABLE logs ADD COLUMN done INTEGER");
 
 // 幂等迁移：老库 projects 无 status 列则补齐
 const projCols = db
@@ -56,6 +62,7 @@ if (!projCols.includes("status"))
 db.exec("UPDATE projects SET status = 'plan' WHERE status IS NULL");
 
 const VALID_STATUS = new Set(["plan", "progress", "failed", "done", "delay"]);
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 const now = () => new Date().toISOString();
 const bodyError = (msg) => ({ error: msg });
 
@@ -110,7 +117,7 @@ app.get("/api/state", (_req, res) => {
   };
   const logs = db
     .prepare(
-      "SELECT id, projectID, date, summary, detail, category, tags FROM logs ORDER BY date",
+      "SELECT id, projectID, date, summary, detail, category, tags, timeStart, timeEnd, done FROM logs ORDER BY date",
     )
     .all()
     .map((l) => ({ ...l, tags: parseTags(l.tags) }));
@@ -264,12 +271,32 @@ app.post("/api/logs", (req, res) => {
     (!Array.isArray(b.tags) || b.tags.some((t) => typeof t !== "string"))
   )
     return res.status(400).json(bodyError("tags: 字符串数组"));
+  if (
+    b.timeStart !== undefined &&
+    b.timeStart !== null &&
+    (typeof b.timeStart !== "string" || !TIME_RE.test(b.timeStart))
+  )
+    return res.status(400).json(bodyError("timeStart: 格式应为 HH:mm"));
+  if (
+    b.timeEnd !== undefined &&
+    b.timeEnd !== null &&
+    (typeof b.timeEnd !== "string" || !TIME_RE.test(b.timeEnd))
+  )
+    return res.status(400).json(bodyError("timeEnd: 格式应为 HH:mm"));
+  if (b.timeStart && b.timeEnd && b.timeEnd < b.timeStart)
+    return res.status(400).json(bodyError("timeEnd: 不能早于 timeStart"));
+  if (b.done !== undefined && typeof b.done !== "boolean")
+    return res.status(400).json(bodyError("done: 布尔"));
+
   const summary = b.summary ?? "";
   const detail = b.detail ?? "";
   const category = b.category ?? null;
   const tags = JSON.stringify(b.tags ?? []);
+  const timeStart = b.timeStart ?? null;
+  const timeEnd = b.timeEnd ?? null;
+  const done = b.done ? 1 : 0;
   db.prepare(
-    "INSERT INTO logs(id, projectID, date, summary, detail, category, tags, updatedAt) VALUES (?,?,?,?,?,?,?,?)",
+    "INSERT INTO logs(id, projectID, date, summary, detail, category, tags, timeStart, timeEnd, done, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
   ).run(
     id,
     b.projectID,
@@ -278,6 +305,9 @@ app.post("/api/logs", (req, res) => {
     detail,
     category,
     tags,
+    timeStart,
+    timeEnd,
+    done,
     now(),
   );
   const log = {
@@ -288,6 +318,9 @@ app.post("/api/logs", (req, res) => {
     detail,
     category,
     tags: b.tags ?? [],
+    timeStart,
+    timeEnd,
+    done: b.done ?? false,
   };
   res.status(201).json({ id, log });
 });
@@ -306,7 +339,16 @@ app.patch("/api/logs/:id", (req, res) => {
   if (!existing) return res.status(404).json(bodyError("not found"));
 
   const fields = {};
-  for (const key of ["date", "summary", "detail", "category", "tags"]) {
+  for (const key of [
+    "date",
+    "summary",
+    "detail",
+    "category",
+    "tags",
+    "timeStart",
+    "timeEnd",
+    "done",
+  ]) {
     if (key in b) fields[key] = b[key];
   }
   if (
@@ -342,7 +384,24 @@ app.patch("/api/logs/:id", (req, res) => {
       fields.tags.some((t) => typeof t !== "string"))
   )
     return res.status(400).json(bodyError("tags: 字符串数组"));
+  if (
+    "timeStart" in fields &&
+    fields.timeStart !== null &&
+    (typeof fields.timeStart !== "string" || !TIME_RE.test(fields.timeStart))
+  )
+    return res.status(400).json(bodyError("timeStart: 格式应为 HH:mm"));
+  if (
+    "timeEnd" in fields &&
+    fields.timeEnd !== null &&
+    (typeof fields.timeEnd !== "string" || !TIME_RE.test(fields.timeEnd))
+  )
+    return res.status(400).json(bodyError("timeEnd: 格式应为 HH:mm"));
+  if (fields.timeStart && fields.timeEnd && fields.timeEnd < fields.timeStart)
+    return res.status(400).json(bodyError("timeEnd: 不能早于 timeStart"));
+  if ("done" in fields && typeof fields.done !== "boolean")
+    return res.status(400).json(bodyError("done: 布尔"));
   if ("tags" in fields) fields.tags = JSON.stringify(fields.tags);
+  if ("done" in fields) fields.done = fields.done ? 1 : 0;
 
   const assignments = Object.keys(fields)
     .map((k) => `${k} = ?`)
@@ -354,7 +413,7 @@ app.patch("/api/logs/:id", (req, res) => {
   );
   const row = db
     .prepare(
-      "SELECT id, projectID, date, status, summary, detail, category, tags FROM logs WHERE id = ?",
+      "SELECT id, projectID, date, summary, detail, category, tags, timeStart, timeEnd, done FROM logs WHERE id = ?",
     )
     .get(req.params.id);
   let tagsArr = [];
@@ -364,7 +423,7 @@ app.patch("/api/logs/:id", (req, res) => {
   } catch {
     // 历史脏数据，按空标签处理
   }
-  res.json({ log: { ...row, tags: tagsArr } });
+  res.json({ log: { ...row, tags: tagsArr, done: !!row.done } });
 });
 
 // DELETE /api/logs/:id

@@ -216,7 +216,7 @@ async function run() {
 
     const dayP = createdProjects[1];
     const d0 = dates[0]; // 今天
-    const mkLog = (summary) =>
+    const mkLog = (summary, opts = {}) =>
         api("/api/logs", {
             method: "POST",
             headers: json,
@@ -227,12 +227,42 @@ async function run() {
                 detail: "同日多日志测试",
                 category: "开发",
                 tags: ["冒烟", "回归"],
+                timeStart: opts.timeStart ?? null,
+                timeEnd: opts.timeEnd ?? null,
+                done: opts.done ?? false,
             }),
         });
-    const l1 = (await mkLog("联调进行中")).log;
-    const l2 = (await mkLog("已完成联调")).log;
+    const l1 = (
+        await mkLog("联调进行中", { timeStart: "09:30", timeEnd: "10:00" })
+    ).log;
+    const l2 = (await mkLog("已完成联调", { timeStart: "14:00", done: true }))
+        .log;
     createdLogs.push(l1, l2);
     assert(l1.id !== l2.id, "同日两条日志 id 应不同");
+    assert(
+        l1.timeStart === "09:30" && l1.timeEnd === "10:00" && l1.done === false,
+        "时间/完成字段未正确回显",
+    );
+    assert(l2.done === true, "l2 完成标记未回显");
+
+    // 非法时间（end<start）应 400
+    let badRejected = false;
+    try {
+        await api("/api/logs", {
+            method: "POST",
+            headers: json,
+            body: JSON.stringify({
+                projectID: dayP.id,
+                date: d0,
+                summary: "非法时间",
+                timeStart: "14:00",
+                timeEnd: "09:00",
+            }),
+        });
+    } catch {
+        badRejected = true;
+    }
+    assert(badRejected, "timeEnd 早于 timeStart 应被拒绝(400)");
 
     const patched = (
         await api(`/api/logs/${l1.id}`, {
@@ -241,11 +271,14 @@ async function run() {
             body: JSON.stringify({
                 summary: "联调超时",
                 tags: ["全量"],
+                done: true,
             }),
         })
     ).log;
     assert(
-        patched.summary === "联调超时" && patched.tags.join(",") === "全量",
+        patched.summary === "联调超时" &&
+            patched.tags.join(",") === "全量" &&
+            patched.done === true,
         "PATCH 日志未生效",
     );
     Object.assign(l1, patched);
@@ -277,6 +310,9 @@ async function run() {
                 got.date === l.date &&
                 got.summary === l.summary &&
                 got.detail === l.detail &&
+                got.timeStart === (l.timeStart ?? null) &&
+                got.timeEnd === (l.timeEnd ?? null) &&
+                !!got.done === !!l.done &&
                 got.category === (l.category ?? null) &&
                 (got.tags ?? []).join(",") === (l.tags ?? []).join(","),
             `日志 ${l.id} 字段不一致`,
