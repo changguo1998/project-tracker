@@ -140,30 +140,18 @@ const visibleProjects = computed<ApiProject[]>(() => {
 });
 
 
-/* ---------- 多行树形表头 ---------- */
-/** 表头层级行号（0..maxLevel），根在 0 行、子级在下 */
-const headerLevels = computed<number[]>(() => {
-    const max = visibleProjects.value.reduce(
-        (m, p) => Math.max(m, p.level),
-        0,
-    );
-    const arr: number[] = [];
-    for (let i = 0; i <= max; i++) arr.push(i);
-    return arr;
-});
-/** 该表头单元格下跨行数：覆盖其当前可见的最深子孙 */
-function headerRowspan(p: ApiProject): number {
-    let bottom = p.level;
-    const walk = (pp: ApiProject): void => {
-        for (const c of childrenOf(pp.id)) {
-            if (visibleProjects.value.includes(c)) {
-                bottom = Math.max(bottom, c.level);
-                walk(c);
-            }
-        }
-    };
-    walk(p);
-    return bottom - p.level + 1;
+/* ---------- 树形表头（分组带 + 底部逐列格） ---------- */
+/** 是否存在子项目（决定是否渲染分组带行） */
+const hasSubtree = computed(() =>
+    visibleProjects.value.some((p) => p.level > 0),
+);
+/** 该组可见列数（自身 + 展开的子孙），用于父级分组带 colspan */
+function subtreeSpan(p: ApiProject): number {
+    let n = 1;
+    if (expanded.value.has(p.id)) {
+        for (const c of childrenOf(p.id)) n += subtreeSpan(c);
+    }
+    return n;
 }
 
 /* ---------- 项目列配色：同族同色系，层级递浅 ---------- */
@@ -623,54 +611,49 @@ onMounted(() => {
                     <div class="table-scroll">
                         <table>
                             <thead>
-                                <tr v-for="lv in headerLevels" :key="lv">
-                                    <th
-                                        class="date-col"
-                                        :rowspan="headerLevels.length"
-                                    >
-                                        日期
-                                    </th>
-                                    <template
-                                        v-for="p in visibleProjects"
-                                        :key="p.id"
-                                    >
+                                <template v-if="hasSubtree">
+                                    <tr>
                                         <th
-                                            v-if="p.level === lv"
-                                            :rowspan="headerRowspan(p)"
+                                            class="date-col"
+                                            rowspan="2"
+                                        >
+                                            日期
+                                        </th>
+                                        <th
+                                            v-for="r in roots"
+                                            :key="r.id"
+                                            :colspan="subtreeSpan(r)"
+                                            class="band"
                                             :style="{
                                                 backgroundColor:
-                                                    columnBgColor(p),
+                                                    columnBgColor(r),
                                             }"
                                         >
-                                            <div
-                                                class="proj-head"
-                                                :style="{
-                                                    paddingLeft:
-                                                        p.level * 14 + 'px',
-                                                }"
-                                            >
+                                            <div class="proj-head band-head">
                                                 <v-btn
-                                                    v-if="hasChildren(p.id)"
+                                                    v-if="hasChildren(r.id)"
                                                     icon
                                                     size="x-small"
                                                     variant="plain"
                                                     class="caret"
-                                                    @click.stop="toggleExpand(p.id)"
+                                                    @click.stop="
+                                                        toggleExpand(r.id)
+                                                    "
                                                 >
                                                     <v-icon>
                                                         {{
-                                                            expanded.has(p.id)
+                                                            expanded.has(r.id)
                                                                 ? "mdi-chevron-down"
                                                                 : "mdi-chevron-right"
                                                         }}
                                                     </v-icon>
                                                 </v-btn>
                                                 <span
-                                                    class="proj-name"
-                                                    :title="p.name"
-                                                    @click="openRename(p)"
+                                                    class="proj-name band-name"
+                                                    :title="r.name"
+                                                    @click="openRename(r)"
                                                 >
-                                                    {{ p.name }}
+                                                    {{ r.name }}
                                                 </span>
                                                 <v-menu location="bottom">
                                                     <template
@@ -691,20 +674,26 @@ onMounted(() => {
                                                     <v-list density="compact">
                                                         <v-list-item
                                                             prepend-icon="mdi-folder-plus"
-                                                            @click="openNewChild(p)"
+                                                            @click="
+                                                                openNewChild(r)
+                                                            "
                                                         >
                                                             新建子项目
                                                         </v-list-item>
                                                         <v-list-item
                                                             prepend-icon="mdi-pencil"
-                                                            @click="openRename(p)"
+                                                            @click="
+                                                                openRename(r)
+                                                            "
                                                         >
                                                             重命名
                                                         </v-list-item>
                                                         <v-list-item
                                                             prepend-icon="mdi-delete"
                                                             class="danger-item"
-                                                            @click="askDeleteProject(p)"
+                                                            @click="
+                                                                askDeleteProject(r)
+                                                            "
                                                         >
                                                             删除
                                                         </v-list-item>
@@ -712,7 +701,96 @@ onMounted(() => {
                                                 </v-menu>
                                             </div>
                                         </th>
-                                    </template>
+                                    </tr>
+                                </template>
+                                <tr>
+                                    <th
+                                        v-if="!hasSubtree"
+                                        class="date-col"
+                                    >
+                                        日期
+                                    </th>
+                                    <th
+                                        v-for="p in visibleProjects"
+                                        :key="p.id"
+                                        :style="{
+                                            backgroundColor: columnBgColor(p),
+                                        }"
+                                    >
+                                        <div
+                                            class="proj-head"
+                                            :style="{
+                                                paddingLeft:
+                                                    p.level * 14 + 'px',
+                                            }"
+                                        >
+                                            <v-btn
+                                                v-if="hasChildren(p.id)"
+                                                icon
+                                                size="x-small"
+                                                variant="plain"
+                                                class="caret"
+                                                @click.stop="
+                                                    toggleExpand(p.id)
+                                                "
+                                            >
+                                                <v-icon>
+                                                    {{
+                                                        expanded.has(p.id)
+                                                            ? "mdi-chevron-down"
+                                                            : "mdi-chevron-right"
+                                                    }}
+                                                </v-icon>
+                                            </v-btn>
+                                            <span
+                                                class="proj-name"
+                                                :title="p.name"
+                                                @click="openRename(p)"
+                                            >
+                                                {{ p.name }}
+                                            </span>
+                                            <v-menu location="bottom">
+                                                <template
+                                                    #activator="{ props }"
+                                                >
+                                                    <v-btn
+                                                        v-bind="props"
+                                                        icon
+                                                        size="x-small"
+                                                        variant="plain"
+                                                        class="proj-more"
+                                                    >
+                                                        <v-icon>
+                                                            mdi-dots-horizontal
+                                                        </v-icon>
+                                                    </v-btn>
+                                                </template>
+                                                <v-list density="compact">
+                                                    <v-list-item
+                                                        prepend-icon="mdi-folder-plus"
+                                                        @click="openNewChild(p)"
+                                                    >
+                                                        新建子项目
+                                                    </v-list-item>
+                                                    <v-list-item
+                                                        prepend-icon="mdi-pencil"
+                                                        @click="openRename(p)"
+                                                    >
+                                                        重命名
+                                                    </v-list-item>
+                                                    <v-list-item
+                                                        prepend-icon="mdi-delete"
+                                                        class="danger-item"
+                                                        @click="
+                                                            askDeleteProject(p)
+                                                        "
+                                                    >
+                                                        删除
+                                                    </v-list-item>
+                                                </v-list>
+                                            </v-menu>
+                                        </div>
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1158,6 +1236,15 @@ td.date-col {
 }
 
 /* ---------- 表头（层级缩进 + 折叠 / 菜单） ---------- */
+.band {
+    text-align: center;
+}
+.band-head {
+    justify-content: center;
+}
+.band-name {
+    font-weight: 700;
+}
 .proj-head {
     display: flex;
     align-items: center;
