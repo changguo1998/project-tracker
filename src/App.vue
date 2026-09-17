@@ -72,7 +72,12 @@ const error = ref("");
 const expanded = ref<Set<string>>(new Set());
 
 const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
-const dateStr = (d: Date): string => d.toISOString().slice(0, 10);
+const dateStr = (d: Date): string => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`; // 本地时区日期（toISOString 为 UTC，东八区会显示成前一天）
+};
 
 /** 近 DAYS 天（含今天），降序：今天的行在最上 */
 const dates = computed((): string[] => {
@@ -980,6 +985,7 @@ td.date-col {
     align-items: center;
     gap: 2px;
     min-width: 120px;
+    max-width: 200px;
 }
 .caret {
     flex: 0 0 auto;
@@ -1010,6 +1016,7 @@ td.date-col {
 /* ---------- 单元格 ---------- */
 .cell {
     min-width: 132px;
+    max-width: 220px;
 }
 .cell-empty {
     color: #cbd5e1;
@@ -1035,10 +1042,11 @@ tr:hover .plus {
 }
 .summary {
     color: #334155;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 200px;
+    max-width: 160px;
 }
 .multi-tag {
     flex: 0 0 auto;
