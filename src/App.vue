@@ -317,11 +317,29 @@ async function randomize(): Promise<void> {
         for (const p of created) {
             for (const d of dates.value) {
                 if (Math.random() < 0.32) {
+                    // 一部分条目随机加起止时间（落在 08:00–18:00，按精度整点对齐）
+                    let tStart: string | null = null;
+                    let tEnd: string | null = null;
+                    if (Math.random() < 0.55) {
+                        const step = precision.value;
+                        const lo = toMin(SLOT_START);
+                        const slots = Math.floor(
+                            (toMin(SLOT_END) - step - lo) / step,
+                        );
+                        const startMin =
+                            lo +
+                            Math.floor(Math.random() * (slots + 1)) * step;
+                        const dur = pick([step, step * 2, step * 3]);
+                        tStart = fmt(startMin);
+                        tEnd = fmt(Math.min(startMin + dur, toMin(SLOT_END)));
+                    }
                     await addLog({
                         projectID: p.id,
                         date: d,
                         summary: pick(SUMMARY_POOL),
                         detail: pick(DETAIL_POOL),
+                        timeStart: tStart,
+                        timeEnd: tEnd,
                     });
                 }
             }
