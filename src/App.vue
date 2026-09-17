@@ -165,6 +165,29 @@ function headerRowspan(p: ApiProject): number {
     walk(p);
     return bottom - p.level + 1;
 }
+
+/* ---------- 项目列配色：同族同色系，层级递浅 ---------- */
+const FAMILY_HUES = [210, 145, 45, 330, 265, 190];
+/** 找到项目所属根（沿 parentID 上溯） */
+function rootOf(p: ApiProject): ApiProject {
+    const byId = new Map(projects.value.map((x) => [x.id, x]));
+    let cur = p;
+    while (cur.parentID && byId.has(cur.parentID)) {
+        cur = byId.get(cur.parentID)!;
+    }
+    return cur;
+}
+/** 列背景色：根按色板区分；子级同色系、更浅更淡 */
+function columnBgColor(p: ApiProject): string {
+    const root = rootOf(p);
+    const order = roots.value.findIndex((r) => r.id === root.id);
+    const hue = FAMILY_HUES[Math.max(0, order) % FAMILY_HUES.length];
+    const lvl = p.level;
+    const sat = 80 - lvl * 8;
+    const light = 90 + lvl * 2;
+    const alpha = Math.max(0.28, 0.9 - lvl * 0.12);
+    return `hsla(${hue}, ${sat}%, ${light}%, ${alpha})`;
+}
 function toggleExpand(id: string): void {
     const s = new Set(expanded.value);
     if (s.has(id)) s.delete(id);
@@ -614,6 +637,10 @@ onMounted(() => {
                                         <th
                                             v-if="p.level === lv"
                                             :rowspan="headerRowspan(p)"
+                                            :style="{
+                                                backgroundColor:
+                                                    columnBgColor(p),
+                                            }"
                                         >
                                             <div
                                                 class="proj-head"
@@ -714,6 +741,9 @@ onMounted(() => {
                                         class="cell"
                                         :class="{
                                             'cell-empty': !primaryLog(p.id, d),
+                                        }"
+                                        :style="{
+                                            backgroundColor: columnBgColor(p),
                                         }"
                                     >
                                         <template v-if="primaryLog(p.id, d)">
