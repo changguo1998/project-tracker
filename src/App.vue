@@ -188,6 +188,13 @@ function columnBgColor(p: ApiProject): string {
     const alpha = Math.max(0.28, 0.9 - lvl * 0.12);
     return `hsla(${hue}, ${sat}%, ${light}%, ${alpha})`;
 }
+/** 可读文字色：同色相、深色（供筛选栏标签等使用） */
+function columnTextColor(p: ApiProject): string {
+    const root = rootOf(p);
+    const order = roots.value.findIndex((r) => r.id === root.id);
+    const hue = FAMILY_HUES[Math.max(0, order) % FAMILY_HUES.length];
+    return `hsl(${hue}, 55%, 30%)`;
+}
 function toggleExpand(id: string): void {
     const s = new Set(expanded.value);
     if (s.has(id)) s.delete(id);
@@ -645,7 +652,7 @@ onMounted(() => {
                             <span
                                 class="filter-label"
                                 :style="{
-                                    color: columnBgColor(r),
+                                    color: columnTextColor(r),
                                     fontWeight: 600,
                                 }"
                             >
