@@ -860,6 +860,7 @@ onMounted(() => {
                                         }"
                                     >
                                         <div
+                                            v-if="!hasSubtree || p.level > 0"
                                             class="proj-head"
                                             :style="{
                                                 paddingLeft:
