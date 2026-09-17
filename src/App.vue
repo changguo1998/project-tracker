@@ -458,7 +458,12 @@ const logDlg = ref<LogDlg>({
     timeEnd: "",
     done: false,
 });
-function openLogNew(p: ApiProject, d: string): void {
+function openLogNew(
+    p: ApiProject,
+    d: string,
+    timeStart = "",
+    timeEnd = "",
+): void {
     multiDlg.value.open = false;
     logDlg.value = {
         open: true,
@@ -469,8 +474,8 @@ function openLogNew(p: ApiProject, d: string): void {
         detail: "",
         category: "",
         tags: [],
-        timeStart: "",
-        timeEnd: "",
+        timeStart,
+        timeEnd,
         done: false,
     };
 }
@@ -558,35 +563,51 @@ function openMulti(p: ApiProject, d: string): void {
     multiDlg.value = { open: true, project: p, date: d };
 }
 
-/* 当日日程：点击日期展开 */
-const dayDlg = ref<{ open: boolean; date: string }>({ open: false, date: "" });
-const projOf = (l: ApiLog): ApiProject | undefined =>
-    projects.value.find((p) => p.id === l.projectID);
-const dayLogs = computed<ApiLog[]>(() => {
-    const d = dayDlg.value.date;
-    return logs.value
-        .filter((l) => l.date === d)
-        .sort((a, b) => {
-            const ta = a.timeStart ?? "99:99";
-            const tb = b.timeStart ?? "99:99";
-            return ta < tb ? -1 : ta > tb ? 1 : 0;
-        });
-});
-function openDay(d: string): void {
-    dayDlg.value = { open: true, date: d };
-}
-async function toggleDone(l: ApiLog): Promise<void> {
-    busy.value = true;
-    error.value = "";
-    try {
-        await patchLog(l.id, { done: !l.done });
-        await load();
-    } catch (e) {
-        error.value = e instanceof Error ? e.message : String(e);
-        await load();
-    } finally {
-        busy.value = false;
+/* 时间槽下钻：点击日期把该行展开为 30 分钟粒度 */
+const SLOT_START = "08:00";
+const SLOT_END = "18:00";
+const SLOT_MIN = 30;
+const expandedDay = ref<string | null>(null);
+const toMin = (t: string): number => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+};
+const fmt = (min: number): string =>
+    `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+const slots = computed<string[]>(() => {
+    const out: string[] = [];
+    for (let m = toMin(SLOT_START); m < toMin(SLOT_END); m += SLOT_MIN) {
+        out.push(fmt(m));
     }
+    return out;
+});
+const nextSlot = (t: string): string => fmt(toMin(t) + SLOT_MIN);
+const inWindow = (l: ApiLog): boolean => {
+    if (!l.timeStart || !l.timeEnd) return false;
+    return (
+        toMin(l.timeStart) >= toMin(SLOT_START) &&
+        toMin(l.timeEnd) <= toMin(SLOT_END)
+    );
+};
+const logRange = (l: ApiLog): [number, number] => {
+    const s = l.timeStart ? toMin(l.timeStart) : toMin(SLOT_START);
+    const e = l.timeEnd ? toMin(l.timeEnd) : s + SLOT_MIN;
+    return [s, e];
+};
+const slotEntries = (pid: string, d: string, slot: string): ApiLog[] =>
+    logs.value.filter((l) => {
+        if (l.projectID !== pid || l.date !== d) return false;
+        if (!inWindow(l)) return false;
+        const [s, e] = logRange(l);
+        const ss = toMin(slot);
+        return s < ss + SLOT_MIN && e > ss;
+    });
+const otherEntries = (pid: string, d: string): ApiLog[] =>
+    logs.value.filter(
+        (l) => l.projectID === pid && l.date === d && !inWindow(l),
+    );
+function toggleDay(d: string): void {
+    expandedDay.value = expandedDay.value === d ? null : d;
 }
 
 /** 点击单元格：多条开列表，单条直接编辑 */
@@ -999,9 +1020,9 @@ onMounted(() => {
                                 </tr>
                             </thead>
                             <tbody>
+                                <template v-for="d in dates" :key="d">
                                 <tr
-                                    v-for="d in dates"
-                                    :key="d"
+                                    v-if="expandedDay !== d"
                                     :class="{
                                         'row-today': isToday(d),
                                         'row-weekend': isWeekend(d),
@@ -1010,8 +1031,8 @@ onMounted(() => {
                                     <td class="date-col">
                                         <span
                                             class="date-text click-date"
-                                            :title="'展开该日日程'"
-                                            @click="openDay(d)"
+                                            :title="'展开当日 30 分钟时间格'"
+                                            @click="toggleDay(d)"
                                         >
                                             {{ d }}
                                         </span>
@@ -1089,6 +1110,138 @@ onMounted(() => {
                                         </span>
                                     </td>
                                 </tr>
+                                <template v-else>
+                                    <tr class="slot-head-row">
+                                        <td class="date-col">
+                                            <span class="date-text">
+                                                {{ d }}
+                                            </span>
+                                            <v-chip
+                                                v-if="isToday(d)"
+                                                size="x-small"
+                                                color="primary"
+                                                class="today-tag"
+                                            >
+                                                今天
+                                            </v-chip>
+                                            <v-btn
+                                                icon
+                                                size="x-small"
+                                                variant="text"
+                                                title="收起"
+                                                @click="toggleDay(d)"
+                                            >
+                                                <v-icon>
+                                                    mdi-chevron-up
+                                                </v-icon>
+                                            </v-btn>
+                                        </td>
+                                        <td
+                                            :colspan="visibleProjects.length"
+                                            class="slot-hint"
+                                        >
+                                            {{ d }} 的 30 分钟日程 ·
+                                            {{ SLOT_START }}–{{ SLOT_END }}
+                                            （点击日期收起）
+                                        </td>
+                                    </tr>
+                                    <tr v-for="slot in slots" :key="slot">
+                                        <td class="date-col slot-time-col">
+                                            <span class="slot-time">
+                                                {{ slot }}
+                                            </span>
+                                        </td>
+                                        <td
+                                            v-for="p in visibleProjects"
+                                            :key="p.id"
+                                            class="cell"
+                                            :style="{
+                                                backgroundColor:
+                                                    columnBgColor(p),
+                                            }"
+                                        >
+                                            <template
+                                                v-if="
+                                                    slotEntries(
+                                                        p.id,
+                                                        d,
+                                                        slot,
+                                                    ).length
+                                                "
+                                            >
+                                                <div
+                                                    v-for="l in slotEntries(
+                                                        p.id,
+                                                        d,
+                                                        slot,
+                                                    )"
+                                                    :key="l.id"
+                                                    class="slot-entry clickable"
+                                                    :class="{
+                                                        'line-done': l.done,
+                                                    }"
+                                                    :title="`${l.timeStart ?? ''}${l.timeEnd ? '–' + l.timeEnd : ''} · ${l.summary}${metaText(l) ? '\n' + metaText(l) : ''}`"
+                                                    @click="openLogEdit(l)"
+                                                >
+                                                    {{ l.summary }}
+                                                </div>
+                                            </template>
+                                            <span
+                                                v-else
+                                                class="slot-add clickable"
+                                                @click="
+                                                    openLogNew(
+                                                        p,
+                                                        d,
+                                                        slot,
+                                                        nextSlot(slot),
+                                                    )
+                                                "
+                                            >
+                                                ＋
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    <tr class="slot-other-row">
+                                        <td class="date-col slot-time-col">
+                                            <span class="slot-time">其他</span>
+                                        </td>
+                                        <td
+                                            v-for="p in visibleProjects"
+                                            :key="p.id"
+                                            class="cell"
+                                            :style="{
+                                                backgroundColor:
+                                                    columnBgColor(p),
+                                            }"
+                                        >
+                                            <template
+                                                v-if="
+                                                    otherEntries(p.id, d).length
+                                                "
+                                            >
+                                                <div
+                                                    v-for="l in otherEntries(
+                                                        p.id,
+                                                        d,
+                                                    )"
+                                                    :key="l.id"
+                                                    class="slot-entry clickable"
+                                                    :class="{
+                                                        'line-done': l.done,
+                                                    }"
+                                                    @click="openLogEdit(l)"
+                                                >
+                                                    {{ l.summary }}
+                                                </div>
+                                            </template>
+                                            <span v-else class="slot-dot">
+                                                ·
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </template>
+                                </template>
                             </tbody>
                         </table>
                     </div>
@@ -1310,107 +1463,6 @@ onMounted(() => {
                     </v-btn>
                     <v-spacer />
                     <v-btn variant="text" @click="multiDlg.open = false">
-                        关闭
-                    </v-btn>
-                </v-card-actions>
-            </v-card>
-        </v-dialog>
-
-        <!-- 当日日程展开 -->
-        <v-dialog v-model="dayDlg.open" max-width="560">
-            <v-card v-if="dayDlg.date">
-                <v-card-title class="day-title">
-                    {{ dayDlg.date }} · 当日日程（{{ dayLogs.length }} 条）
-                </v-card-title>
-                <v-card-text>
-                    <div v-if="!dayLogs.length" class="day-empty">
-                        当天暂无安排，可在表格该日对应项目格中点＋新增
-                    </div>
-                    <div
-                        v-for="l in dayLogs"
-                        :key="l.id"
-                        class="day-item"
-                        :class="{ 'day-done': l.done }"
-                    >
-                        <v-checkbox
-                            :model-value="l.done"
-                            density="compact"
-                            hide-details
-                            class="day-check"
-                            @update:model-value="toggleDone(l)"
-                        />
-                        <div class="day-body">
-                            <div class="day-proj">
-                                {{
-                                    projOf(l)?.name ?? "（已删除项目）"
-                                }}
-                            </div>
-                            <div class="day-summary">
-                                <v-chip
-                                    v-if="l.timeStart"
-                                    size="x-small"
-                                    variant="outlined"
-                                    class="day-time"
-                                >
-                                    {{
-                                        l.timeStart +
-                                        (l.timeEnd ? `–${l.timeEnd}` : "")
-                                    }}
-                                </v-chip>
-                                <span :class="{ 'line-done': l.done }">
-                                    {{ l.summary }}
-                                </span>
-                            </div>
-                            <div v-if="l.detail" class="day-detail">
-                                {{ l.detail }}
-                            </div>
-                            <div
-                                v-if="l.category || l.tags.length"
-                                class="log-meta"
-                            >
-                                <v-chip
-                                    v-if="l.category"
-                                    size="x-small"
-                                    variant="flat"
-                                    color="primary"
-                                    class="meta-chip"
-                                >
-                                    {{ l.category }}
-                                </v-chip>
-                                <v-chip
-                                    v-for="t in l.tags"
-                                    :key="t"
-                                    size="x-small"
-                                    variant="outlined"
-                                    class="meta-chip"
-                                >
-                                    #{{ t }}
-                                </v-chip>
-                            </div>
-                        </div>
-                        <div class="day-ops">
-                            <v-btn
-                                icon
-                                size="x-small"
-                                variant="text"
-                                @click="openLogEdit(l)"
-                            >
-                                <v-icon>mdi-pencil</v-icon>
-                            </v-btn>
-                            <v-btn
-                                icon
-                                size="x-small"
-                                variant="text"
-                                @click="askDeleteLog(l)"
-                            >
-                                <v-icon>mdi-delete</v-icon>
-                            </v-btn>
-                        </div>
-                    </div>
-                </v-card-text>
-                <v-card-actions>
-                    <v-spacer />
-                    <v-btn variant="text" @click="dayDlg.open = false">
                         关闭
                     </v-btn>
                 </v-card-actions>
@@ -1749,6 +1801,52 @@ tr:hover .plus {
 .confirm-text {
     font-size: 15px;
     color: #334155;
+}
+
+/* 时间槽下钻 */
+.slot-head-row td {
+    background: #f8fafc;
+}
+.slot-hint {
+    padding: 4px 14px;
+    font-size: 12px;
+    color: #94a3b8;
+}
+.slot-time-col {
+    background: #f8fafc;
+}
+.slot-time {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 600;
+}
+.slot-entry {
+    font-size: 12px;
+    color: #334155;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.6);
+    margin: 1px 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.slot-entry:hover {
+    background: rgba(255, 255, 255, 0.95);
+}
+.slot-add {
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+tr:hover .slot-add {
+    opacity: 0.7;
+}
+.slot-dot {
+    color: #cbd5e1;
+    text-align: center;
+}
+.slot-other-row td {
+    border-top: 1px dashed #e2e8f0;
 }
 
 /* 时间输入行 */

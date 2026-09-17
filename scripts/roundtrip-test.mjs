@@ -312,7 +312,7 @@ async function run() {
                 got.detail === l.detail &&
                 got.timeStart === (l.timeStart ?? null) &&
                 got.timeEnd === (l.timeEnd ?? null) &&
-                !!got.done === !!l.done &&
+                Boolean(got.done) === Boolean(l.done) &&
                 got.category === (l.category ?? null) &&
                 (got.tags ?? []).join(",") === (l.tags ?? []).join(","),
             `日志 ${l.id} 字段不一致`,
