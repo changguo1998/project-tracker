@@ -820,7 +820,7 @@ onMounted(() => {
                                                 </v-icon>
                                             </v-btn>
                                             <span
-                                                v-if="!hasSubtree"
+                                                v-if="!hasSubtree || p.level > 0"
                                                 class="proj-name"
                                                 :title="p.name"
                                                 @click="openRename(p)"
