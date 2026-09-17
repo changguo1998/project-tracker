@@ -1,21 +1,15 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import type { TaskStatus } from "@/types/main";
+import type { ApiProject, ApiLog } from "@/types/main";
+import {
+    getState,
+    addProject,
+    addLog,
+    deleteProject,
+} from "@/api";
 
-/* ---------- 类型与随机数据池 ---------- */
-interface DemoProject {
-    id: string;
-    name: string;
-}
-interface DemoLog {
-    id: string;
-    projectID: string;
-    date: string;
-    status: TaskStatus;
-    summary: string;
-    detail: string;
-}
-
+/* ---------- 随机数据池（仅用于生成示例内容，写入走后端） ---------- */
 const PROJECT_POOL = [
     "网站改版",
     "移动端 App",
@@ -66,11 +60,12 @@ const STATUS_NAME: Record<TaskStatus, string> = {
 const DAYS = 14;
 
 /* ---------- 状态 ---------- */
-const projects = ref<DemoProject[]>([]);
-const logs = ref<DemoLog[]>([]);
+const projects = ref<ApiProject[]>([]);
+const logs = ref<ApiLog[]>([]);
+const busy = ref(false);
+const error = ref("");
 
 const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
-const uid = (): string => Math.random().toString(36).slice(2, 10);
 const dateStr = (d: Date): string => d.toISOString().slice(0, 10);
 
 /** 近 DAYS 天（含今天），降序：今天的行在最上 */
@@ -91,41 +86,76 @@ const isWeekend = (d: string): boolean => {
     const day = new Date(`${d}T00:00:00`).getDay();
     return day === 0 || day === 6;
 };
-const logOf = (pid: string, d: string): DemoLog | undefined =>
+const logOf = (pid: string, d: string): ApiLog | undefined =>
     logs.value.find((l) => l.projectID === pid && l.date === d);
 const logCount = computed(() => logs.value.length);
 const totalDays = computed(() => dates.value.length);
 const hasData = computed(() => projects.value.length > 0);
 
-/* ---------- 随机生成 / 清空 ---------- */
-function randomize(): void {
-    const n = 5 + Math.floor(Math.random() * 4); // 5~8 个项目
-    projects.value = PROJECT_POOL.slice()
-        .sort(() => Math.random() - 0.5)
-        .slice(0, n)
-        .map((name) => ({ id: uid(), name }));
-    const ls: DemoLog[] = [];
-    for (const p of projects.value) {
-        for (const d of dates.value) {
-            if (Math.random() < 0.32) {
-                ls.push({
-                    id: uid(),
-                    projectID: p.id,
-                    date: d,
-                    status: pick(STATUS),
-                    summary: pick(SUMMARY_POOL),
-                    detail: pick(DETAIL_POOL),
-                });
-            }
-        }
-    }
-    logs.value = ls;
+/* ---------- 与后端交互 ---------- */
+async function load(): Promise<void> {
+    const st = await getState();
+    projects.value = st.projects;
+    logs.value = st.logs;
 }
 
-function clear(): void {
-    projects.value = [];
-    logs.value = [];
+/** 随机生成：把示例数据真实写入后端，再从 state 读回渲染 */
+async function randomize(): Promise<void> {
+    busy.value = true;
+    error.value = "";
+    try {
+        const n = 5 + Math.floor(Math.random() * 4); // 5~8 个项目
+        const names = PROJECT_POOL.slice()
+            .sort(() => Math.random() - 0.5)
+            .slice(0, n);
+        const created: ApiProject[] = [];
+        for (const name of names) {
+            created.push(await addProject({ parentID: null, name }));
+        }
+        for (const p of created) {
+            for (const d of dates.value) {
+                if (Math.random() < 0.32) {
+                    await addLog({
+                        projectID: p.id,
+                        date: d,
+                        status: pick(STATUS),
+                        summary: pick(SUMMARY_POOL),
+                        detail: pick(DETAIL_POOL),
+                    });
+                }
+            }
+        }
+        await load(); // 以服务端为准回读
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : String(e);
+        await load(); // 失败也回读，保持与库一致
+    } finally {
+        busy.value = false;
+    }
 }
+
+/** 清空：逐个 DELETE 项目（级联清其日志） */
+async function clear(): Promise<void> {
+    busy.value = true;
+    error.value = "";
+    try {
+        for (const id of projects.value.map((p) => p.id)) {
+            await deleteProject(id);
+        }
+        await load();
+    } catch (e) {
+        error.value = e instanceof Error ? e.message : String(e);
+        await load();
+    } finally {
+        busy.value = false;
+    }
+}
+
+onMounted(() => {
+    load().catch((e: unknown) => {
+        error.value = e instanceof Error ? e.message : String(e);
+    });
+});
 </script>
 
 <template>
@@ -151,7 +181,7 @@ function clear(): void {
                     </v-chip>
                     <v-btn
                         variant="tonal"
-                        :disabled="!hasData"
+                        :disabled="busy || !hasData"
                         prepend-icon="mdi-delete-outline"
                         @click="clear"
                     >
@@ -159,6 +189,7 @@ function clear(): void {
                     </v-btn>
                     <v-btn
                         color="primary"
+                        :disabled="busy"
                         prepend-icon="mdi-dice-5"
                         @click="randomize"
                     >
@@ -168,17 +199,36 @@ function clear(): void {
             </template>
         </v-app-bar>
 
+        <v-progress-linear
+            v-if="busy"
+            indeterminate
+            color="primary"
+            height="2"
+        />
+
         <!-- 内容区 -->
         <v-main>
             <v-container fluid class="content">
+                <!-- 错误提示 -->
+                <v-alert
+                    v-if="error"
+                    type="error"
+                    variant="tonal"
+                    closable
+                    class="err"
+                    @click:close="error = ''"
+                >
+                    {{ error }}
+                </v-alert>
+
                 <!-- 空状态 -->
-                <v-card v-if="!hasData" class="empty">
+                <v-card v-if="!hasData && !busy" class="empty">
                     <v-icon size="52" color="secondary">
                         mdi-calendar-blank-outline
                     </v-icon>
                     <div class="empty-title">还没有数据</div>
                     <div class="empty-sub">
-                        点击右上角「随机生成数据」填充示例时间表
+                        点击右上角「随机生成数据」写入示例时间表（数据保存在后端）
                     </div>
                 </v-card>
 
@@ -294,9 +344,12 @@ function clear(): void {
 .content {
     padding: 24px;
 }
+.err {
+    margin-bottom: 16px;
+}
 .empty {
     margin: 12vh auto 0;
-    max-width: 420px;
+    max-width: 440px;
     padding: 48px 24px;
     text-align: center;
     color: #64748b;
