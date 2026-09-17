@@ -103,11 +103,20 @@ const dateStr = (d: Date): string => {
     return `${y}-${m}-${day}`; // 本地时区日期（toISOString 为 UTC，东八区会显示成前一天）
 };
 
-/** 近 DAYS 天（含今天），降序：今天的行在最上 */
+/** 未来计划天数（可在标题栏调整） */
+const futureDays = ref(7);
+
+/** 日期序列：未来（+1..+F，升序）→ 今天 → 过去（-1..-DAYS，降序）
+ *  未来部分用于添加计划；今天行以「今天」标签与底色标识 */
 const dates = computed((): string[] => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const out: string[] = [];
+    for (let i = 1; i <= futureDays.value; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        out.push(dateStr(d));
+    }
     for (let i = 0; i < DAYS; i++) {
         const d = new Date(today);
         d.setDate(today.getDate() - i);
@@ -575,8 +584,16 @@ onMounted(() => {
                         class="stat-chip"
                     >
                         {{ projects.length }} 个项目 · {{ logCount }} 条记录 ·
-                        近 {{ totalDays }} 天
+                        {{ totalDays }} 天
                     </v-chip>
+                    <v-select
+                        v-model="futureDays"
+                        :items="[0, 3, 5, 7, 10, 14]"
+                        label="未来计划"
+                        density="compact"
+                        hide-details
+                        class="future-select"
+                    />
                     <v-btn
                         variant="tonal"
                         :disabled="busy || !hasData"
