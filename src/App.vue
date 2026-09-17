@@ -214,6 +214,19 @@ function toggleExpand(id: string): void {
     expanded.value = s;
 }
 
+/** 一键折叠所有项目（清空展开集） */
+function collapseAll(): void {
+    expanded.value = new Set();
+}
+/** 一键展开所有项目（展开全部可展示层级且有子级的项目） */
+function expandAll(): void {
+    const s = new Set<string>();
+    for (const p of projects.value) {
+        if (hasChildren(p.id) && p.level < MAX_DEPTH) s.add(p.id);
+    }
+    expanded.value = s;
+}
+
 /* ---------- 日志查询 ---------- */
 /** 该日日志（同日内按入库序，后插在前作为"最新"展示） */
 const logsFor = (pid: string, d: string): ApiLog[] =>
@@ -609,6 +622,26 @@ onMounted(() => {
                         @click="openNewProject(null)"
                     >
                         新建项目
+                    </v-btn>
+                    <v-btn
+                        icon
+                        size="small"
+                        variant="text"
+                        title="一键折叠所有项目"
+                        :disabled="busy"
+                        @click="collapseAll"
+                    >
+                        <v-icon>mdi-arrow-collapse-all</v-icon>
+                    </v-btn>
+                    <v-btn
+                        icon
+                        size="small"
+                        variant="text"
+                        title="一键展开所有项目"
+                        :disabled="busy"
+                        @click="expandAll"
+                    >
+                        <v-icon>mdi-arrow-expand-all</v-icon>
                     </v-btn>
                     <v-btn
                         color="primary"
