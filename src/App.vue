@@ -126,7 +126,19 @@ const childrenOf = (id: string): ApiProject[] =>
 const hasChildren = (id: string): boolean => childrenOf(id).length > 0;
 const roots = computed(() => projects.value.filter((p) => !p.parentID));
 
-/** 可见列：按树 DFS 展开排序（收起的父级不进入其子级列） */
+/* 筛选：勾选要渲染的根项目（子级随根显示） */
+const selectedRoots = ref<Set<string>>(new Set());
+const selectedRootsList = computed(() =>
+    roots.value.filter((r) => selectedRoots.value.has(r.id)),
+);
+function toggleRoot(id: string, on: boolean): void {
+    const s = new Set(selectedRoots.value);
+    if (on) s.add(id);
+    else s.delete(id);
+    selectedRoots.value = s;
+}
+
+/** 可见列：按被勾选的根树 DFS 展开排序（收起的父级不进入其子级列） */
 const visibleProjects = computed<ApiProject[]>(() => {
     const acc: ApiProject[] = [];
     const walk = (list: ApiProject[]): void => {
@@ -135,7 +147,7 @@ const visibleProjects = computed<ApiProject[]>(() => {
             if (expanded.value.has(p.id)) walk(childrenOf(p.id));
         }
     };
-    walk(roots.value);
+    walk(selectedRootsList.value);
     return acc;
 });
 
@@ -217,6 +229,16 @@ async function load(): Promise<void> {
     const st = await getState();
     projects.value = st.projects;
     logs.value = st.logs;
+
+    // 同步筛选集：新增根默认勾选，已被删除的根移除
+    const rids = new Set(
+        projects.value.filter((p) => !p.parentID).map((r) => r.id),
+    );
+    const next = new Set(
+        [...selectedRoots.value].filter((id) => rids.has(id)),
+    );
+    for (const id of rids) next.add(id);
+    selectedRoots.value = next;
     if (firstLoad) {
         firstLoad = false;
         // 默认展开所有含子级的项目
@@ -606,6 +628,32 @@ onMounted(() => {
                     </div>
                 </v-card>
 
+                <!-- 项目筛选栏：勾选要在表格中渲染的项目 -->
+                <v-card v-if="hasData && roots.length" class="filter-bar">
+                    <span class="filter-title">显示：</span>
+                    <v-checkbox
+                        v-for="r in roots"
+                        :key="r.id"
+                        :model-value="selectedRoots.has(r.id)"
+                        density="compact"
+                        hide-details
+                        class="filter-check"
+                        @update:model-value="toggleRoot(r.id, !!$event)"
+                    >
+                        <template #label>
+                            <span
+                                class="filter-label"
+                                :style="{
+                                    color: columnBgColor(r),
+                                    fontWeight: 600,
+                                }"
+                            >
+                                {{ r.name }}
+                            </span>
+                        </template>
+                    </v-checkbox>
+                </v-card>
+
                 <!-- 日期 × 项目表格 -->
                 <v-card v-else class="table-card">
                     <div class="table-scroll">
@@ -743,6 +791,7 @@ onMounted(() => {
                                                 </v-icon>
                                             </v-btn>
                                             <span
+                                                v-if="!hasSubtree"
                                                 class="proj-name"
                                                 :title="p.name"
                                                 @click="openRename(p)"
@@ -1138,6 +1187,25 @@ onMounted(() => {
 }
 .err {
     margin-bottom: 16px;
+}
+/* 项目筛选栏 */
+.filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0 16px;
+    padding: 8px 16px;
+    margin-bottom: 16px;
+}
+.filter-title {
+    font-size: 13px;
+    color: #64748b;
+}
+.filter-check {
+    margin: 0;
+}
+.filter-label {
+    font-size: 13px;
 }
 .empty {
     margin: 12vh auto 0;
