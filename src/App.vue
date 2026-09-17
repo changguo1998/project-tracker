@@ -112,7 +112,7 @@ const dates = computed((): string[] => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const out: string[] = [];
-    for (let i = 1; i <= futureDays.value; i++) {
+    for (let i = futureDays.value; i >= 1; i--) {
         const d = new Date(today);
         d.setDate(today.getDate() + i);
         out.push(dateStr(d));
