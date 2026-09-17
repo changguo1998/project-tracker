@@ -1,10 +1,10 @@
 services:
   app:
+    # 运行时镜像：只装后端依赖（express），一次性构建；
+    # 前端 dist 与 server.js 通过挂载提供，日常改动不需要 --build。
     build:
       context: .
-      args:
-        # 构建期令牌：烘焙进前端 bundle；与 TOKEN 互为同一共享口令的前端侧
-        VITE_API_TOKEN: ${VITE_API_TOKEN:-}
+    image: project-tracker:runtime
     environment:
       # 服务端共享口令：必填，缺失则 compose config 直接报错（与 server.js fail-fast 双重保障）
       TOKEN: ${TOKEN:?TOKEN must be set in .env}
@@ -15,4 +15,7 @@ services:
     volumes:
       # SQLite 数据文件跨重启保留
       - ./server/data:/data
+      # 资源目录挂载：宿主机 pnpm build 产出 dist（静态），server.js 直接改直接生效
+      - ./dist:/app/dist
+      - ./server/server.js:/app/server/server.js
     restart: unless-stopped

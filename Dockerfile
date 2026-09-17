@@ -1,41 +1,16 @@
-# ===== Stage 1: 构建前端（产出 dist/）=====
-FROM node:24-alpine AS stage1
-
-# 构建期令牌：烘焙进前端静态 bundle；轮换需改此值并重建镜像
-ARG VITE_API_TOKEN
-ENV VITE_API_TOKEN=$VITE_API_TOKEN
-
-# 启用 corepack 并激活 pnpm@11（版本与 package.json 的 packageManager 字段一致）
-RUN corepack enable && corepack prepare pnpm@11.27.0 --activate
-
-WORKDIR /app
-
-# 先复制依赖清单，利用层缓存
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
-
-# 复制源码并构建
-COPY . .
-RUN pnpm build
-
-# ===== Stage 2: 运行时 =====
+# ===== 运行时镜像（不再构建前端）=====
+# 前端由宿主机 pnpm build 产出 dist/，后端源码与静态资源通过
+# docker-compose 挂载进容器 —— 改动代码后只需 pnpm build / docker compose restart，
+# 不需要重新构建本镜像。
 FROM node:24-alpine
 
-ENV NODE_ENV=production \
-    DB_PATH=/data/tracker.db \
-    PORT=3000
+ENV NODE_ENV=production
 
 WORKDIR /app
 
-# server/ 自带 express 依赖，且不在根 workspace / pnpm-lock.yaml 中 —— 在运行时 phase 单独安装
+# 后端仅依赖 express（DB 用 Node 内置 node:sqlite，无原生模块）
 COPY server/package.json ./server/package.json
 RUN npm install --prefix ./server --omit=dev
 
-# 复制构建产物与后端源码
-COPY --from=stage1 /app/dist ./dist
-COPY server ./server
-
 EXPOSE 3000
-VOLUME /data
-
 CMD ["node", "server/server.js"]

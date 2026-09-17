@@ -44,10 +44,21 @@ vim .env
 > **两者的关系**：是同一个共享口令的「前端侧」与「服务端侧」副本，必须相同，否则前端请求全部 401。
 > 生成随机串示例：`openssl rand -hex 32`（已实测；演练即用该命令生成 64 位共享口令）。
 
-## 4. 构建并启动
+## 4. 构建并启动（挂载模式，不再重建镜像）
+
+前端改为**宿主机构建 + 目录挂载**：`Dockerfile` 只保留后端运行时（仅装 express），
+`dist/` 与 `server/server.js` 通过 `docker-compose.yml` 的 volumes 挂载进容器。
+日常改动**不需要重新构建镜像**。
 
 ```bash
-docker compose up -d --build   # 已实测：两阶段构建镜像 project-tracker-app 并后台启动（宿主机 8080 端口）
+# 1. 首次：构建一次运行时镜像并启动（之后都不需要 --build）
+docker compose up -d --build
+
+# 2. 日常改前端：宿主机构建静态产物即可，静态文件实时生效，无需任何 docker 操作
+pnpm build
+
+# 3. 日常改后端 server.js：挂载文件直接生效，重启即加载
+docker compose restart
 ```
 
 常用运维命令（均已在演练中使用）：
